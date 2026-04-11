@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // Mới thêm
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:zalo_mobile_app/common/constants/api_constants.dart';
 import 'package:zalo_mobile_app/routes/app_routes.dart';
+import 'package:zalo_mobile_app/services/socket_service.dart';
 
 class AuthController {
 
@@ -41,9 +42,17 @@ class AuthController {
         if (response.statusCode == 200 || response.statusCode == 201) {
           if (data['code'] == 1000) {
             final accessToken = data['result']['accessToken'];
+            Map<String, dynamic> decodedToken = JwtDecoder.decode(accessToken);
+            final userId = decodedToken['userId'];
+            // Conect socket
+            SocketService().connect(userId);
             await storage.write(
               key: "access_token",
               value: accessToken,
+            );
+            await storage.write(
+              key: "user_id",
+              value: userId,
             );
             return null; // ✅ success
           } else {
@@ -53,6 +62,7 @@ class AuthController {
           return "Login fail ";
         }
       } catch (e) {
+        print("Lỗi kết nối: $e");
         return "Lỗi kết nối: $e";
       }
   }

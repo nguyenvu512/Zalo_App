@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
-import 'package:zalo_mobile_app/features/home/screens/home_screen.dart';
-import 'package:zalo_mobile_app/features/profile/screens/profile_screen.dart';
+import 'package:zalo_mobile_app/features/chat/screens/chat_screen.dart';
+import 'package:zalo_mobile_app/features/home_screen/screens/home_screen.dart';
+import 'package:zalo_mobile_app/features/profile_screen/screens/profile_screen.dart';
 import 'package:zalo_mobile_app/routes/app_routes.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
@@ -23,6 +24,19 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: AppRoutes.profile,
       builder: (context, state) => ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.chatScreen,
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>?;
+
+        return ChatScreen(
+          conversationId: data?['conversationId'] ?? "",
+          otherUserId: data?['otherUserId'] ?? "",
+          name: data?['name'] ?? "No name",
+          avatar: data?['avatar'] ?? "",
+        );
+      },
     ),
   ],
 );
