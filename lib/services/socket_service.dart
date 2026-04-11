@@ -63,4 +63,15 @@ class SocketService {
     print("🧹 Remove listener: $event");
     socket!.off(event);
   }
+  void disconnect() {
+    if (socket != null) {
+      print("🔌 Disconnect socket...");
+
+      socket!.disconnect();   // ngắt kết nối
+      socket!.dispose();      // giải phóng resource
+      socket = null;          // reset instance
+
+      print("✅ Socket disconnected");
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:zalo_mobile_app/features/auth/screens/forgotPassword_screen.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_screen.dart';
 import 'package:zalo_mobile_app/features/home_screen/screens/home_screen.dart';
 import 'package:zalo_mobile_app/features/profile_screen/screens/profile_screen.dart';
@@ -24,6 +25,10 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: AppRoutes.profile,
       builder: (context, state) => ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.forgotPassword,
+      builder: (context, state) => ForgotPasswordScreen(),
     ),
     GoRoute(
       path: AppRoutes.chatScreen,

@@ -72,13 +72,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 40),
 
-                  // Email
-                  CustomTextField(label: "Email", controller: emailController),
+                  CustomTextField(
+                    label: "Email",
+                    controller: emailController,
+                  ),
 
                   const SizedBox(height: 16),
 
-                  // Password
-                  CustomTextField(label: "Password", controller: passwordController),
+                  CustomTextField(
+                    label: "Password",
+                    controller: passwordController,
+                    isPasswordField: true,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: () {
+                         context.go(AppRoutes.forgotPassword);
+                      },
+                      child: const Text(
+                        "Forgot password?",
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -101,9 +124,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      )
+                      ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
