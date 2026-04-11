@@ -66,7 +66,6 @@ class _ConversationListState extends State<ConversationList> {
     }
 
     return ListView.separated(
-      reverse: true, // 👈 QUAN TRỌNG
       itemCount: conversations.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
