@@ -1,5 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_screen.dart';
+import 'package:zalo_mobile_app/features/contact_screen/screens/add_contact_screen.dart';
+import 'package:zalo_mobile_app/features/contact_screen/screens/contact_screen.dart';
 import 'package:zalo_mobile_app/features/home_screen/screens/home_screen.dart';
 import 'package:zalo_mobile_app/features/profile_screen/screens/profile_screen.dart';
 import 'package:zalo_mobile_app/routes/app_routes.dart';
@@ -37,6 +39,10 @@ final GoRouter router = GoRouter(
           avatar: data?['avatar'] ?? "",
         );
       },
+    ),
+    GoRoute(
+      path: AppRoutes.addContactScreen,
+      builder: (context, state) => AddContactScreen(),
     ),
   ],
 );

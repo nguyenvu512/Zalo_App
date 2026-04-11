@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zalo_mobile_app/features/contact_screen/screens/contact_screen.dart';
 import 'package:zalo_mobile_app/features/message_screen/screens/message_screen.dart';
 import 'package:zalo_mobile_app/features/profile_screen/screens/profile_screen.dart';
 import 'dart:ui'; // 👈 quan trọng (blur)
@@ -15,7 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const Center(child: MessageScreen()), // Thay bằng MessageScreen()
-    const Center(child: Text('Contacts')),   // Thay bằng ContactScreen()
+    const Center(child: ContactScreen()),   // Thay bằng ContactScreen()
     const Center(child: Text('Discover')),  // Thay bằng DiscoverScreen()
     const Center(child: MessageScreen()),   // Thay bằng TimelineScreen()
     const Center(child: ProfileScreen()),   // Thay bằng ProfileScreen()
@@ -60,11 +61,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(30),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                 child: Container(
                   height: 56,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.8), // 👈 nền mờ
+                    color: Colors.white.withOpacity(0.4), // 👈 nền mờ
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Row(
