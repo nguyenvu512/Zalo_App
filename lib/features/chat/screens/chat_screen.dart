@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -50,15 +51,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
       switch (eventName) {
         case "receive_message":
-          setState(() {
-            messages.insert(0, {
-              "_id": data["_id"] ?? "",
-              "content": data["message"],
-              "isMe": false,
-              "userId": data["userId"],
-              "type": data["type"],
+          final raw = data["message"];
+
+            Map<String, dynamic> message;
+
+            if (raw is String) {
+              message = jsonDecode(raw); // ✅ convert string -> map
+            } else {
+              message = Map<String, dynamic>.from(raw);
+            }
+
+            setState(() {
+              messages.insert(0, message);
             });
-          });
           break;
 
         case "message_recalled":
@@ -89,7 +94,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void loadMessages() async {
-    final userId = await storage.read(key: "user_id");
     try {
       setState(() {
         isLoading = true;
@@ -97,37 +101,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final data = await chatController.getMessages(widget.conversationId);
 
       setState(() {
-        messages = data.map((msg) {
-          final type = msg["type"] ?? "text";
-
-          String content = "";
-
-          if (type == "image" || type == "file") {
-            final attachments = msg["attachments"] as List?;
-            if (attachments != null && attachments.isNotEmpty) {
-              content = attachments[0]["url"] ?? "";
-            }
-          } else {
-            content = msg["content"] ?? "";
-          }
-
-          return {
-            "_id": msg["_id"] ?? "",   // ← thêm dòng này
-            "type": type,
-            "content": content,
-            "isMe": (msg["senderId"] is Map
-                ? msg["senderId"]["_id"]
-                : msg["senderId"]) ==
-                userId,
-            "status": msg["status"],
-            "createdAt": msg["createdAt"],
-            "isRecalled": msg["isRecalled"],
-            "isDeleted": msg["isDeleted"]
-          };
-        }).toList();
+        messages = data.map((msg) => Map<String, dynamic>.from(msg)).toList();});
         isLoading = false;
-      });
-    } catch (e) {
+      } catch (e) {
       isLoading = false;
       print("❌ Load message failed: $e");
     }
@@ -142,10 +118,14 @@ class _ChatScreenState extends State<ChatScreen> {
     /// 1. Optimistic UI (hiển thị ngay)
     setState(() {
       messages.insert(0, {
+        "_id": "",
+        "senderId": userId,
         "type": type,
         "content": type == "image" ? localPath : content,
-        "isMe": true,
+        "attachments": [],
         "status": "sending",
+        "isRecalled": false,
+        "isDeleted": false,
         "createdAt": DateTime.now().toIso8601String(),
       });
     });
@@ -164,31 +144,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final message = res["result"];
 
-      /// 3. Lấy content thật từ response
-      String finalContent = content;
-
-      if (type == "image") {
-        finalContent = message["attachments"]?[0]?["url"] ?? localPath;
-      } else {
-        finalContent = message["content"] ?? content;
-      }
-
       /// 4. Gửi socket realtime
       SocketService().emit("send_message", {
         "userId": userId,
         "toUserId": widget.otherUserId,
-        "message": finalContent,
-        "type": type,
+        "message": message,
       });
 
       /// 5. Update UI
       setState(() {
-        messages[insertedIndex] = {
-          ...messages[insertedIndex],
-          "_id": message["_id"] ?? "",   // ← thêm dòng này
-          "content": finalContent,
-          "status": message["status"] ?? "sent",
-        };
+        messages[insertedIndex] = Map<String, dynamic>.from(message);
       });
     } catch (e) {
       /// 6. Error
@@ -242,44 +207,27 @@ class _ChatScreenState extends State<ChatScreen> {
                   final msg = messages[index];
 
                   return ChatMessage(
-                    type: msg["type"] ?? "text",
-                    message: msg["content"] ?? "",
-                    isMe: msg["isMe"] ?? false,
-                    status: msg["status"],
-                    createdAt: msg["createdAt"] != null
-                        ? DateTime.tryParse(msg["createdAt"])
-                        : null,
-                    recalled: msg["isRecalled"] ?? false,
-                    isDeleted: msg["isDeleted"] ?? false,
+                    message: msg,
                     onLongPress: () => MessageOption.show(
                       context: context,
+                      otherUserId: widget.otherUserId,
                       message: msg,
-                      isMe: msg["isMe"] ?? false,
-                      conversationId: widget.conversationId,
-                      chatController: chatController,
-                      otherUserId: widget.otherUserId,  // ← thêm
                       onSuccess: (result, messageId) {
                         setState(() {
-                          if (result == MessageOptionResult.deleted) {
-                            final i = messages.indexWhere((m) => m["_id"] == messageId);
-                            if (i != -1) {
-                              messages[i] = {
-                                ...messages[i],
-                                "isDeleted": true,
-                              };
-                            }
-                          } else if (result == MessageOptionResult.recalled) {
-                            final i = messages.indexWhere((m) => m["_id"] == messageId);
-                            if (i != -1) {
-                              messages[i] = {
-                                ...messages[i],
-                                "isRecalled": true,
-                              };
-                            }
+                          final i = messages.indexWhere((m) => m["_id"] == messageId);
+                          if (i == -1) return;
+
+                          switch (result) {
+                            case MessageOptionResult.deleted:
+                              messages[i] = {...messages[i], "isDeleted": true};
+                              break;
+                            case MessageOptionResult.recalled:
+                              messages[i] = {...messages[i], "isRecalled": true};
+                              break;
                           }
                         });
                       },
-                    ),
+                    )
                   );
                 },
               ),
