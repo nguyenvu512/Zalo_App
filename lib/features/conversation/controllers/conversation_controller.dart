@@ -25,7 +25,15 @@ class ConversationController {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['code'] == 1000) {
-        return data['result'];
+        final List<dynamic> result = data['result'];
+
+        result.sort((a, b) {
+          final aTime = a["lastMessageId"]?["createdAt"] ?? a["createdAt"] ?? "";
+          final bTime = b["lastMessageId"]?["createdAt"] ?? b["createdAt"] ?? "";
+          return bTime.compareTo(aTime); // ← mới nhất lên đầu
+        });
+
+        return result;
       } else {
         throw Exception("Lấy conversation thất bại");
       }

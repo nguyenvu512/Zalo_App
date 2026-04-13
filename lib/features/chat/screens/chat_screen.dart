@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:zalo_mobile_app/features/chat/controllers/chat_controller.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_appbar.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_message.dart';
+import 'package:zalo_mobile_app/features/chat/screens/message_option.dart';
 import 'package:zalo_mobile_app/services/socket_service.dart';
 import 'chat_input.dart';
 
@@ -25,8 +27,10 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final chatController = ChatController();
   final TextEditingController _controller = TextEditingController();
   final storage = FlutterSecureStorage();
+  bool isLoading = false;
 
   List<Map<String, dynamic>> messages = [];
 
@@ -38,69 +42,158 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Lắng nghe tin nhắn mới
     SocketService().on("receive_message", (data) {
+      print("📨 receive_message: $data");  // ← thêm dòng này
+
       if (mounted) {
         setState(() {
           messages.insert(0, {
-            "message": data["message"],
+            "content": data["message"],
             "isMe": false,
             "userId": data["userId"],
+            "type": data["type"]
           });
+        });
+      }
+    });
+    // Lắng nghe thu hồi tin nhắn
+    SocketService().on("message_recalled", (data) {
+      if (mounted) {
+        setState(() {
+          final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
+          if (i != -1) {
+            messages[i] = {
+              ...messages[i],
+              "isRecalled": true,
+            };
+          }
+        });
+      }
+    });
+
+    // Lắng nghe xóa tin nhắn
+    SocketService().on("message_deleted", (data) {
+      if (mounted) {
+        setState(() {
+          final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
+          if (i != -1) {
+            messages[i] = {
+              ...messages[i],
+              "isDeleted": true,
+            };
+          }
         });
       }
     });
   }
 
   void loadMessages() async {
-    final controller = ChatController();
     final userId = await storage.read(key: "user_id");
-
     try {
-      final data = await controller.getMessages(widget.conversationId);
+      setState(() {
+        isLoading = true;
+      });
+      final data = await chatController.getMessages(widget.conversationId);
 
       setState(() {
         messages = data.map((msg) {
+          final type = msg["type"] ?? "text";
+
+          String content = "";
+
+          if (type == "image" || type == "file") {
+            final attachments = msg["attachments"] as List?;
+            if (attachments != null && attachments.isNotEmpty) {
+              content = attachments[0]["url"] ?? "";
+            }
+          } else {
+            content = msg["content"] ?? "";
+          }
+
           return {
-            "message": msg["message"],
-            "isMe": msg["userId"] == userId,
+            "_id": msg["_id"] ?? "",   // ← thêm dòng này
+            "type": type,
+            "content": content,
+            "isMe": (msg["senderId"] is Map
+                ? msg["senderId"]["_id"]
+                : msg["senderId"]) ==
+                userId,
+            "status": msg["status"],
+            "createdAt": msg["createdAt"],
+            "isRecalled": msg["isRecalled"],
+            "isDeleted": msg["isDeleted"]
           };
         }).toList();
+        isLoading = false;
       });
     } catch (e) {
+      isLoading = false;
       print("❌ Load message failed: $e");
     }
   }
 
-  void handleSend(String text) async {
+  void handleSend({String? text, File? file, required String type}) async {
     final userId = await storage.read(key: "user_id");
-    final newMessage = {
-      "message": text,
-      "isMe": true,
-      "status": "sending",
-    };
 
+    String content = text ?? "";
+    String localPath = file?.path ?? "";
+
+    /// 1. Optimistic UI (hiển thị ngay)
     setState(() {
-      messages.insert(0, newMessage);
+      messages.insert(0, {
+        "type": type,
+        "content": type == "image" ? localPath : content,
+        "isMe": true,
+        "status": "sending",
+        "createdAt": DateTime.now().toIso8601String(),
+      });
     });
 
-    // Gửi lên backend qua Socket
-    SocketService().emit("send_message", {
-      "userId": userId,   // ID của mình
-      "toUserId": widget.otherUserId,    // ID người nhận (toUserId ở backend)
-      "message": text,
-    });
+    final insertedIndex = 0;
 
-    // gọi api send message
-    final controller = ChatController();
-    bool isSuccess = await controller.sendMessage(
-      conversationId: widget.conversationId,
-      senderId: userId ?? "",
-      content: text,
-    );
+    try {
+      /// 2. Gọi API (GIỮ NGUYÊN BACKEND)
+      final res = await chatController.sendMessage(
+        conversationId: widget.conversationId,
+        senderId: userId ?? "",
+        content: type == "text" ? content : "",
+        file: type == "image" ? file : null,
+        type: type,
+      );
 
-    // 3. Cập nhật lại trạng thái tin nhắn dựa trên kết quả API
-    setState(() {
-      newMessage["status"] = isSuccess ? "sent" : "error";
-    });
+      final message = res["result"];
+
+      /// 3. Lấy content thật từ response
+      String finalContent = content;
+
+      if (type == "image") {
+        finalContent = message["attachments"]?[0]?["url"] ?? localPath;
+      } else {
+        finalContent = message["content"] ?? content;
+      }
+
+      /// 4. Gửi socket realtime
+      SocketService().emit("send_message", {
+        "userId": userId,
+        "toUserId": widget.otherUserId,
+        "message": finalContent,
+        "type": type,
+      });
+
+      /// 5. Update UI
+      setState(() {
+        messages[insertedIndex] = {
+          ...messages[insertedIndex],
+          "_id": message["_id"] ?? "",   // ← thêm dòng này
+          "content": finalContent,
+          "status": message["status"] ?? "sent",
+        };
+      });
+    } catch (e) {
+      /// 6. Error
+      setState(() {
+        messages[insertedIndex]["status"] = "error";
+      });
+    }
   }
 
   @override
@@ -114,11 +207,12 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Cho phép body tràn xuống dưới thanh điều hướng hệ thống (nếu cần)
       extendBody: true,
+      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          /// 1. Background (Dưới cùng)
+          /// 1. BACKGROUND
           Positioned.fill(
             child: Image.asset(
               "assets/images/chat_background.jpg",
@@ -126,24 +220,71 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          /// 2. Chat Area (Ở giữa - Chiếm toàn bộ màn hình)
+          /// 2. CHAT AREA (LIST)
           Positioned.fill(
-            child: ListView.builder(
-              // Quan trọng: Thêm padding để tin nhắn đầu và cuối không bị AppBar/Input che mất
-              reverse: true, // 👈 Dòng quan trọng nhất
-              padding: const EdgeInsets.only(top: 80, bottom: 90),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final msg = messages[index];
-                return ChatMessage(
-                  message: msg["message"],
-                  isMe: msg["isMe"],
-                );
-              },
+            child: SafeArea(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : messages.isEmpty
+                  ? const Center(
+                child: Text(
+                  "Chưa có tin nhắn",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              )
+                  : ListView.builder(
+                reverse: true,
+                padding: const EdgeInsets.only(top: 80, bottom: 90),
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  final msg = messages[index];
+
+                  return ChatMessage(
+                    type: msg["type"] ?? "text",
+                    message: msg["content"] ?? "",
+                    isMe: msg["isMe"] ?? false,
+                    status: msg["status"],
+                    createdAt: msg["createdAt"] != null
+                        ? DateTime.tryParse(msg["createdAt"])
+                        : null,
+                    recalled: msg["isRecalled"] ?? false,
+                    isDeleted: msg["isDeleted"] ?? false,
+                    onLongPress: () => MessageOption.show(
+                      context: context,
+                      message: msg,
+                      isMe: msg["isMe"] ?? false,
+                      conversationId: widget.conversationId,
+                      chatController: chatController,
+                      otherUserId: widget.otherUserId,  // ← thêm
+                      onSuccess: (result, messageId) {
+                        setState(() {
+                          if (result == MessageOptionResult.deleted) {
+                            final i = messages.indexWhere((m) => m["_id"] == messageId);
+                            if (i != -1) {
+                              messages[i] = {
+                                ...messages[i],
+                                "isDeleted": true,
+                              };
+                            }
+                          } else if (result == MessageOptionResult.recalled) {
+                            final i = messages.indexWhere((m) => m["_id"] == messageId);
+                            if (i != -1) {
+                              messages[i] = {
+                                ...messages[i],
+                                "isRecalled": true,
+                              };
+                            }
+                          }
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
           ),
 
-          /// 3. AppBar (Ở trên cùng)
+          /// 3. APP BAR
           Positioned(
             top: 0,
             left: 0,
@@ -154,7 +295,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          /// 4. Input (Ở dưới cùng)
+          /// 4. INPUT
           Positioned(
             bottom: 0,
             left: 0,

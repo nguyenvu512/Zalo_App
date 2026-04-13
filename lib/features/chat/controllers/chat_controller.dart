@@ -1,47 +1,66 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 import 'package:zalo_mobile_app/common/constants/api_constants.dart';
 
 class ChatController {
 
   final storage = FlutterSecureStorage();
 
-  Future<bool> sendMessage({
+  Future<Map<String, dynamic>> sendMessage({
     required String conversationId,
     required String senderId,
     required String content,
+    required String type, // text | image | audio | sticker | file
+    File? file,
   }) async {
     try {
       final token = await storage.read(key: "access_token");
-
       final url = Uri.parse("${ApiConstants.baseUrl}/message/send");
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'conversationId': conversationId,
-          'content': content,
-          'senderId': senderId,
-        }),
-      );
+      final request = http.MultipartRequest("POST", url);
+
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.fields['conversationId'] = conversationId;
+      request.fields['senderId'] = senderId;
+      request.fields['content'] = content;
+      request.fields['type'] = type; // 🔥 QUAN TRỌNG
+
+      // =========================
+      // FILE UPLOAD
+      // =========================
+      if (file != null) {
+        final mime = lookupMimeType(file.path)?.split('/');
+
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'files',
+            file.path,
+            contentType: mime != null
+                ? MediaType(mime[0], mime[1])
+                : MediaType('application', 'octet-stream'),
+          ),
+        );
+      }
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 201 && data['code'] == 1000) {
-        return true;
+        return data;
       } else {
-        print("❌ Server logic error: ${response.body}");
-        throw Exception("Send message error");
+        print("❌ Send error: ${response.body}");
+        throw Exception("Send message failed");
       }
     } catch (e) {
-      print("Lỗi: $e");
-      throw Exception("Lỗi: $e");
+      print("❌ Exception: $e");
+      rethrow;
     }
   }
 
@@ -66,13 +85,8 @@ class ChatController {
       if (response.statusCode == 200 && data['code'] == 1000) {
         final List list = data['result']['data'];
 
-        return list.map((item) {
-          return {
-            "message": item["content"],
-            "userId": item["senderId"]["_id"],
-            "createdAt": item["createdAt"],
-          };
-        }).toList();
+        // ✅ ÉP KIỂU CHUẨN
+        return list.map((e) => Map<String, dynamic>.from(e)).toList();
       } else {
         throw Exception("Load messages error");
       }
@@ -81,5 +95,62 @@ class ChatController {
       rethrow;
     }
   }
+
+  Future<Map<String, dynamic>> revokeMessage(String messageId) async {
+    try {
+      final token = await storage.read(key: "access_token");
+
+      final url = Uri.parse("${ApiConstants.baseUrl}/message/revoke");
+
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({"messageId": messageId}),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['code'] == 1000) {
+        return Map<String, dynamic>.from(data['result']);
+      } else {
+        throw Exception("Revoke message error: ${data['message']}");
+      }
+    } catch (e) {
+      print("❌ Lỗi thu hồi message: $e");
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteMessage(String messageId) async {
+    try {
+      final token = await storage.read(key: "access_token");
+
+      final url = Uri.parse("${ApiConstants.baseUrl}/message/delete");
+
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({"messageId": messageId}),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['code'] == 1000) {
+        return Map<String, dynamic>.from(data['result']);
+      } else {
+        throw Exception("Revoke message error: ${data['message']}");
+      }
+    } catch (e) {
+      print("❌ Lỗi thu hồi message: $e");
+      rethrow;
+    }
+  }
+
 
 }
