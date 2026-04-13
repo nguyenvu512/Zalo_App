@@ -146,11 +146,12 @@ class AuthController {
   Future<String?> register({
     required String fullName,
     required String email,
+    required String phone,
     required String password,
     required String confirmPassword,
   }) async {
     // Validate
-    if (fullName.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (fullName.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty||phone.isEmpty) {
       return "Please fill in all the information";
     }
 
@@ -188,5 +189,71 @@ class AuthController {
       return "Lỗi kết nối: $e";
     }
   }
+  Future<String?> forgotPassword({
+    required String email,
+  }) async {
+    if (email.isEmpty) {
+      return "Please enter your email";
+    }
+
+    try {
+      final url = Uri.parse("${ApiConstants.baseUrl}/user/forgot-password");
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return data['message'] ?? null;
+      } else {
+        return data['message'] ?? "Send OTP failed";
+      }
+    } catch (e) {
+      return "Connection error: $e";
+    }
+  }
+
+  Future<String?> verifyForgotPasswordOtp({
+    required String email,
+    required String otp,
+  }) async {
+    if (email.isEmpty || otp.isEmpty) {
+      return "Please fill in all the information";
+    }
+
+    try {
+      final url = Uri.parse("${ApiConstants.baseUrl}/user/verify-forgot-password-otp");
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'otp': otp,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return data['message'] ?? null;
+      } else {
+        return data['message'] ?? "OTP verification failed";
+      }
+    } catch (e) {
+      return "Connection error: $e";
+    }
+  }
+
 
 }

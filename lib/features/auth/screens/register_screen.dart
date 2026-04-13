@@ -22,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController = TextEditingController();
 
@@ -34,6 +35,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       fullName: fullNameController.text.trim(),
       email: emailController.text.trim(),
       password: passwordController.text.trim(),
+      phone: phoneController.text.trim(),
       confirmPassword: confirmPasswordController.text.trim(),
     );
 
@@ -78,6 +80,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const SizedBox(height: 16),
 
                   CustomTextField(label: "Email", controller: emailController),
+                  const SizedBox(height: 16),
+
+                  CustomTextField(label: "Phone", controller: phoneController),
 
                   const SizedBox(height: 16),
 
