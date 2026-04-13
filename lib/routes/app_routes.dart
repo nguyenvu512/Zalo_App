@@ -6,7 +6,7 @@ class AppRoutes {
   static const String chatScreen = '/chatScreen';
   static const String messageScreen = '/messageScreen';
   static const String forgotPassword = '/forgotPassword';
-
+  static const String profileDetail = '/profileDetail';
   static const String contactScreen = '/contactScreen';
   static const String addContactScreen = '/addContactScreen';
 }
