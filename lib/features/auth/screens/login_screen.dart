@@ -5,6 +5,7 @@ import 'package:zalo_mobile_app/common/widgets/custom_text_field.dart';
 import 'package:zalo_mobile_app/common/widgets/my_button.dart';
 import 'package:zalo_mobile_app/routes/app_routes.dart';
 import 'package:zalo_mobile_app/features/auth/controllers/auth_controller.dart';
+import 'package:zalo_mobile_app/services/local_notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -106,6 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
 
                   MyButton(label: "Login", onTap: handleLogin),
+
 
                   const SizedBox(height: 16),
 

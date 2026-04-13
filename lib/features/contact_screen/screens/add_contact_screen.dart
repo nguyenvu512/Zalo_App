@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/common/widgets/custom_text_field.dart';
 import 'package:zalo_mobile_app/common/widgets/my_button.dart';
+import 'package:zalo_mobile_app/features/contact_screen/controllers/contact_controller.dart';
+import 'package:zalo_mobile_app/routes/app_routes.dart';
 
 class AddContactScreen extends StatefulWidget {
   const AddContactScreen({super.key});
@@ -12,11 +15,54 @@ class AddContactScreen extends StatefulWidget {
 
 class _AddContactScreenState extends State<AddContactScreen> {
   final TextEditingController phoneController = TextEditingController();
+  final ContactController controller =
+  ContactController(storage: const FlutterSecureStorage());
+
+  bool isLoading = false;
 
   @override
   void dispose() {
     phoneController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleAddContact() async {
+    final phone = phoneController.text.trim();
+
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Vui lòng nhập số điện thoại")),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final user = await controller.findUserByPhone(phone);
+
+      if (!mounted) return;
+
+      if (user != null) {
+        context.push(AppRoutes.profileDetail, extra: user);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Không tìm thấy người dùng")),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Lỗi: $e")),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
 
   @override
@@ -36,21 +82,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
           ),
         ),
         centerTitle: true,
-        title: const Text(
-          "Liên hệ mới",
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-            letterSpacing: 0.3,
-          ),
-        ),
+        title: const Text("Liên hệ mới"),
       ),
-
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomTextField(
               label: "Số điện thoại",
@@ -58,12 +94,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
             ),
             const SizedBox(height: 24),
             MyButton(
-              label: "Thêm",
-              backgroundColor: Colors.blue.withOpacity(0.5),
+              label: isLoading ? "Đang tìm..." : "Thêm",
+              backgroundColor: Colors.blue,
               textColor: Colors.white,
-              onTap: () {
-                // TODO: logic tìm kiếm
-              },
+              onTap: isLoading ? null : _handleAddContact,
             ),
           ],
         ),

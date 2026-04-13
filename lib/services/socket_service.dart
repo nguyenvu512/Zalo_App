@@ -1,77 +1,83 @@
+import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:zalo_mobile_app/common/constants/api_constants.dart';
+import 'package:zalo_mobile_app/services/local_notification_service.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
   factory SocketService() => _instance;
-
   SocketService._internal();
 
-  IO.Socket? socket;
+  IO.Socket? _socket;
+
+  final StreamController<Map<String, dynamic>> _eventController =
+  StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get eventsStream => _eventController.stream;
 
   void connect(String userId) {
-    socket = IO.io(
-      ApiConstants.socketUrl, // ví dụ: http://192.168.1.10:3000
+    if (_socket != null && _socket!.connected) return;
+
+    _socket = IO.io(
+      ApiConstants.socketUrl,
       IO.OptionBuilder()
-          .setTransports(['websocket']) // bắt buộc
+          .setTransports(['websocket'])
           .disableAutoConnect()
+          .enableReconnection()
           .build(),
     );
 
-    socket!.connect();
+    _socket!.connect();
 
-    // 🔥 Khi connect thành công
-    socket!.onConnect((_) {
-      print("Connected: ${socket!.id}");
-
-      // 👉 join room user
-      socket!.emit("join", userId);
-    });
-
-    socket!.onDisconnect((_) {
-      print("Disconnected");
+    _socket!.onConnect((_) {
+      _socket!.emit("join", userId);
+      print("Connected: ${_socket!.id}");
     });
   }
-
   void emit(String event, dynamic data) {
-    print("--- Debug Socket Emit ---");
-    print("Event: $event");
-    print("Data: $data");
-
-    if (socket == null) {
-      print("❌ LỖI: Socket instance đang là NULL. Bạn đã gọi connect() chưa?");
+    if (_socket == null) {
+      print("❌ Socket null, chưa connect");
       return;
     }
 
-    if (!socket!.connected) {
-      print("⚠️ CẢNH BÁO: Socket đã khởi tạo nhưng ĐANG MẤT KẾT NỐI.");
-      // Bạn có thể thử gọi socket!.connect() lại ở đây nếu cần
+    if (!_socket!.connected) {
+      print("⚠️ Socket chưa connect, đang reconnect...");
+      _socket!.connect();
+      return;
     }
 
-    print("🚀 Đang thực hiện emit...");
-    socket?.emit(event, data);
+    print("🚀 Emit: $event | data: $data");
+    _socket!.emit(event, data);
   }
 
-  // Lắng nghe dữ liệu về
-  void on(String event, Function(dynamic) callback) {
-    socket?.on(event, callback);
-  }
+  void listenEvent(String event) {
+    if (_socket == null) return;
 
-  void off(String event) {
-    if (socket == null) return;
+    _socket!.off(event);
 
-    print("🧹 Remove listener: $event");
-    socket!.off(event);
-  }
-  void disconnect() {
-    if (socket != null) {
-      print("🔌 Disconnect socket...");
+    _socket!.on(event, (data) async {
+      print("📩 Event: $event | data: $data");
 
-      socket!.disconnect();   // ngắt kết nối
-      socket!.dispose();      // giải phóng resource
-      socket = null;          // reset instance
+      _eventController.add({
+        "event": event,
+        "data": data,
+      });
 
-      print("✅ Socket disconnected");
-    }
+      if (event == "notification:new") {
+        try {
+          final map = Map<String, dynamic>.from(data as Map);
+
+          final title = map["title"]?.toString() ?? "Thông báo mới";
+          final body = map["content"]?.toString() ?? "";
+
+          await LocalNotificationService().showNotification(
+            title: title,
+            body: body,
+          );
+        } catch (e) {
+          print("❌ show local notification error: $e");
+        }
+      }
+    });
   }
 }

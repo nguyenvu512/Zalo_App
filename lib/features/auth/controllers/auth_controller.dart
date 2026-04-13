@@ -169,11 +169,11 @@ class AuthController {
         },
         body: jsonEncode({
           'fullName': fullName,
+          'phone':phone,
           'email': email,
           'password': password,
         }),
       );
-
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {

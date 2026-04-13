@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -13,7 +14,6 @@ class ChatScreen extends StatefulWidget {
   final String name;
   final String otherUserId;
   final String avatar;
-
   const ChatScreen({
     super.key,
     required this.conversationId,
@@ -33,55 +33,57 @@ class _ChatScreenState extends State<ChatScreen> {
   bool isLoading = false;
 
   List<Map<String, dynamic>> messages = [];
-
+  StreamSubscription? _socketSub;
   @override
   void initState() {
     super.initState();
 
     loadMessages();
 
-    // Lắng nghe tin nhắn mới
-    SocketService().on("receive_message", (data) {
-      print("📨 receive_message: $data");  // ← thêm dòng này
+    _socketSub = SocketService().eventsStream.listen((event) {
+      final eventName = event["event"];
+      final data = event["data"];
 
-      if (mounted) {
-        setState(() {
-          messages.insert(0, {
-            "content": data["message"],
-            "isMe": false,
-            "userId": data["userId"],
-            "type": data["type"]
+      print("📩 Stream Event: $eventName | data: $data");
+
+      if (!mounted) return;
+
+      switch (eventName) {
+        case "receive_message":
+          setState(() {
+            messages.insert(0, {
+              "_id": data["_id"] ?? "",
+              "content": data["message"],
+              "isMe": false,
+              "userId": data["userId"],
+              "type": data["type"],
+            });
           });
-        });
-      }
-    });
-    // Lắng nghe thu hồi tin nhắn
-    SocketService().on("message_recalled", (data) {
-      if (mounted) {
-        setState(() {
-          final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
-          if (i != -1) {
-            messages[i] = {
-              ...messages[i],
-              "isRecalled": true,
-            };
-          }
-        });
-      }
-    });
+          break;
 
-    // Lắng nghe xóa tin nhắn
-    SocketService().on("message_deleted", (data) {
-      if (mounted) {
-        setState(() {
-          final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
-          if (i != -1) {
-            messages[i] = {
-              ...messages[i],
-              "isDeleted": true,
-            };
-          }
-        });
+        case "message_recalled":
+          setState(() {
+            final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
+            if (i != -1) {
+              messages[i] = {
+                ...messages[i],
+                "isRecalled": true,
+              };
+            }
+          });
+          break;
+
+        case "message_deleted":
+          setState(() {
+            final i = messages.indexWhere((m) => m["_id"] == data["messageId"]);
+            if (i != -1) {
+              messages[i] = {
+                ...messages[i],
+                "isDeleted": true,
+              };
+            }
+          });
+          break;
       }
     });
   }
@@ -201,7 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // TODO: implement dispose
     super.dispose();
     _controller.dispose();
-    SocketService().off("receive_message");
+    _socketSub?.cancel();
   }
 
   @override

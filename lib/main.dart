@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:zalo_mobile_app/routes/app_router.dart';
+import 'package:zalo_mobile_app/services/local_notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocalNotificationService().init();
   runApp(const MyApp());
 }
 
