@@ -199,7 +199,7 @@ class _ContactScreenState extends State<ContactScreen> {
                       icon: Icons.group_add,
                       label: "Nhóm mới",
                       iconColor: Colors.orange,
-                      onTap: () {},
+                      onTap: () {context.push(AppRoutes.createGroupScreen);},
                     ),
                   ],
                 ),

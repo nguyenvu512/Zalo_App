@@ -41,5 +41,47 @@ class ConversationController {
       throw Exception("Lỗi: $e");
     }
   }
+  Future<Map<String, dynamic>> createGroupConversation({
+    required String name,
+    required List<String> memberIds,
+    String avatarUrl = "",
+  }) async {
+    final token = await storage.read(key: "access_token");
 
+    if (token == null || token.isEmpty) {
+      throw Exception("Không tìm thấy access token");
+    }
+
+    final url = Uri.parse("${ApiConstants.baseUrl}/conversation/group");
+
+    final response = await http.post(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "name": name,
+        "avatarUrl": avatarUrl,
+        "memberIds": memberIds,
+      }),
+    );
+
+    if (response.body.trim().startsWith("<")) {
+      throw Exception("Server trả về HTML thay vì JSON");
+    }
+
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(decoded["message"] ?? "Tạo nhóm thất bại");
+    }
+
+    final data = decoded["data"];
+    if (data is! Map<String, dynamic>) {
+      throw Exception("Dữ liệu nhóm trả về không hợp lệ");
+    }
+
+    return data;
+  }
 }

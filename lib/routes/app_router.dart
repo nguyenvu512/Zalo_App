@@ -5,6 +5,8 @@ import 'package:zalo_mobile_app/features/auth/screens/forgotPassword_screen.dart
 import 'package:zalo_mobile_app/features/chat/screens/chat_screen.dart';
 import 'package:zalo_mobile_app/features/contact_screen/screens/add_contact_screen.dart';
 import 'package:zalo_mobile_app/features/contact_screen/screens/contact_screen.dart';
+import 'package:zalo_mobile_app/features/contact_screen/screens/create_group_info_screen.dart';
+import 'package:zalo_mobile_app/features/contact_screen/screens/create_group_screen.dart';
 import 'package:zalo_mobile_app/features/home_screen/screens/home_screen.dart';
 import 'package:zalo_mobile_app/features/profile_screen/screens/profile_detail_screen.dart';
 import 'package:zalo_mobile_app/features/profile_screen/screens/profile_screen.dart';
@@ -66,6 +68,17 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: AppRoutes.addContactScreen,
       builder: (context, state) => AddContactScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.createGroupScreen,
+      builder: (context, state) => const CreateGroupScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.createGroupInfoScreen,
+      builder: (context, state) {
+        final selectedFriends = state.extra as List<Map<String, dynamic>>;
+        return CreateGroupInfoScreen(selectedFriends: selectedFriends);
+      },
     ),
   ],
 );
