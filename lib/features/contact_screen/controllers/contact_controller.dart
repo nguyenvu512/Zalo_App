@@ -88,4 +88,5 @@ class ContactController {
 
     return result;
   }
+
 }
