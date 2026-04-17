@@ -67,12 +67,44 @@ class _ConversationListState extends State<ConversationList> {
       final id = user["_id"];
       if (id == null) continue;
 
-      if (id != currentUserId) {
+      if (id.toString() != currentUserId.toString()) {
         return user;
       }
     }
 
     return null;
+  }
+
+  String _getConversationName(Map<String, dynamic> item) {
+    final type = (item["type"] ?? "direct").toString();
+
+    // ✅ Group: lấy theo api trả về
+    if (type == "group") {
+      final name = (item["name"] ?? "").toString().trim();
+      return name.isNotEmpty ? name : "Nhóm chat";
+    }
+
+    // ✅ Direct: lấy theo logic cũ (tên người còn lại)
+    final otherUser = getOtherUser(item["members"] as List?);
+    return (otherUser?["fullName"] ?? "No name").toString();
+  }
+
+  String _getConversationAvatar(Map<String, dynamic> item) {
+    final type = (item["type"] ?? "direct").toString();
+
+    // ✅ Group: lấy avatarUrl theo api trả về
+    if (type == "group") {
+      return (item["avatarUrl"] ?? "").toString();
+    }
+
+    // ✅ Direct: lấy theo logic cũ (avatar người còn lại)
+    final otherUser = getOtherUser(item["members"] as List?);
+    return (otherUser?["avatarUrl"] ?? "").toString();
+  }
+
+  String _getOtherUserIdForDirect(Map<String, dynamic> item) {
+    final otherUser = getOtherUser(item["members"] as List?);
+    return (otherUser?["_id"] ?? "").toString();
   }
 
   String _getLastMessage(Map<String, dynamic> item) {
@@ -89,6 +121,8 @@ class _ConversationListState extends State<ConversationList> {
     switch (type) {
       case "text":
         return (lastMsg["content"] ?? "").toString();
+      case "sticker":
+        return "Sticker";
       case "image":
         return "📷 Hình ảnh";
       case "file":
@@ -99,10 +133,8 @@ class _ConversationListState extends State<ConversationList> {
   }
 
   String _getLastTime(Map<String, dynamic> item) {
-    final lastMsg = item["lastMessageId"];
-    if (lastMsg == null || lastMsg is! Map) return "";
-
-    final raw = lastMsg["createdAt"];
+    // Ưu tiên lastMessageAt (đúng theo api)
+    final raw = item["lastMessageAt"] ?? (item["lastMessageId"] is Map ? item["lastMessageId"]["createdAt"] : null);
     if (raw == null) return "";
 
     try {
@@ -149,17 +181,14 @@ class _ConversationListState extends State<ConversationList> {
           return const SizedBox.shrink();
         }
 
-        final members = item["members"];
-        final otherUser = getOtherUser(members);
-
-        if (otherUser == null) {
-          return const SizedBox.shrink();
-        }
-
-        final name = (otherUser["fullName"] ?? "No name").toString();
-        final avatar = (otherUser["avatarUrl"] ?? "").toString();
         final conversationId = (item["_id"] ?? "").toString();
-        final otherUserId = (otherUser["_id"] ?? "").toString();
+        final type = (item["type"] ?? "direct").toString();
+
+        final name = _getConversationName(item);
+        final avatar = _getConversationAvatar(item);
+
+        // direct mới cần otherUserId để chat 1-1
+        final otherUserId = type == "direct" ? _getOtherUserIdForDirect(item) : "";
 
         return ConversationItem(
           name: name,
@@ -167,6 +196,7 @@ class _ConversationListState extends State<ConversationList> {
           lastMessage: _getLastMessage(item),
           time: _getLastTime(item),
           unreadCount: 0,
+          type: type,
           onTap: () async {
             await context.push(
               AppRoutes.chatScreen,
@@ -175,6 +205,7 @@ class _ConversationListState extends State<ConversationList> {
                 "otherUserId": otherUserId,
                 "name": name,
                 "avatar": avatar,
+                "type": type, // (tuỳ chọn) truyền sang chat screen
               },
             );
 

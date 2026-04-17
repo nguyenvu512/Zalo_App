@@ -4,32 +4,34 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:zalo_mobile_app/common/popups/confirm_popup.dart';
 import 'package:zalo_mobile_app/features/chat/controllers/chat_controller.dart';
+import 'package:zalo_mobile_app/features/chat/screens/forward_message_popup.dart';
 import 'package:zalo_mobile_app/services/socket_service.dart';
 
-enum MessageOptionResult { deleted, recalled }
-enum _LoadingState { none, recalling, deleting }
+enum MessageOptionResult { deleted, recalled, replied }
+enum _LoadingState { none, recalling, deleting, forwarding, reacting }
 
 class MessageOption extends StatefulWidget {
   final Map<String, dynamic> message;
   final void Function(MessageOptionResult result, String messageId) onSuccess;
-  final String? otherUserId; // ✅ thêm dòng này
+  final String? otherUserId;
 
   const MessageOption({
     super.key,
     required this.message,
     required this.onSuccess,
-    required this.otherUserId, // ✅
+    required this.otherUserId,
   });
 
-  static Future<void> show({
+  static Future<Map<String, dynamic>?> show({
     required BuildContext context,
     required Map<String, dynamic> message,
-    required String? otherUserId, // ✅ thêm
-    required void Function(MessageOptionResult result, String messageId) onSuccess,
+    required String? otherUserId,
+    required void Function(MessageOptionResult result, String messageId)
+    onSuccess,
   }) {
     HapticFeedback.mediumImpact();
 
-    return Navigator.of(context).push(
+    return Navigator.of(context).push<Map<String, dynamic>?>(
       PageRouteBuilder(
         opaque: false,
         barrierDismissible: true,
@@ -39,7 +41,7 @@ class MessageOption extends StatefulWidget {
         pageBuilder: (_, __, ___) => MessageOption(
           message: message,
           onSuccess: onSuccess,
-          otherUserId: otherUserId, // ✅ truyền vào
+          otherUserId: otherUserId,
         ),
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
@@ -61,6 +63,8 @@ class _MessageOptionState extends State<MessageOption>
 
   final _storage = const FlutterSecureStorage();
   final chatController = ChatController();
+
+  final List<String> _quickReactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
   String? _currentUserId;
   _LoadingState _loadingState = _LoadingState.none;
@@ -91,6 +95,7 @@ class _MessageOptionState extends State<MessageOption>
 
   Future<void> _initUser() async {
     final id = await _storage.read(key: "user_id");
+    if (!mounted) return;
     setState(() {
       _currentUserId = id;
     });
@@ -102,24 +107,82 @@ class _MessageOptionState extends State<MessageOption>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  // Getters
-  // ─────────────────────────────────────────────
+  String get _messageId => widget.message["_id"] ?? widget.message["id"] ?? "";
 
-  String get _messageId =>
-      widget.message["_id"] ?? widget.message["id"] ?? "";
+  bool get isMe => widget.message["senderId"]?["_id"] == _currentUserId;
 
-  bool get isMe =>
-      widget.message["senderId"]?["_id"] == _currentUserId;
-
-  String get conversationId =>
-      widget.message["conversationId"] ?? "";
+  String get conversationId => widget.message["conversationId"] ?? "";
 
   void _dismiss() => Navigator.of(context).pop();
 
-  // ─────────────────────────────────────────────
-  // Actions
-  // ─────────────────────────────────────────────
+  Future<void> _handleReply() async {
+    if (_loadingState != _LoadingState.none) return;
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      widget.onSuccess(MessageOptionResult.replied, _messageId);
+    }
+  }
+
+  Future<void> _handleReact(String emoji) async {
+    if (_loadingState != _LoadingState.none) return;
+
+    setState(() {
+      _loadingState = _LoadingState.reacting;
+      _errorText = null;
+    });
+
+    try {
+      final res = await chatController.reactMessage(
+        messageId: _messageId,
+        emoji: emoji,
+      );
+
+      final updatedMessage = Map<String, dynamic>.from(res["result"]);
+
+      if (mounted) {
+        Navigator.of(context).pop(updatedMessage);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingState = _LoadingState.none;
+        _errorText = "Thả cảm xúc thất bại";
+      });
+    }
+  }
+
+  Future<void> _handleForward() async {
+    if (_loadingState != _LoadingState.none) return;
+
+    setState(() {
+      _loadingState = _LoadingState.forwarding;
+      _errorText = null;
+    });
+
+    try {
+      await ForwardMessagePopup.show(
+        context: context,
+        message: widget.message,
+        currentConversationId: conversationId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _loadingState = _LoadingState.none;
+        });
+      }
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingState = _LoadingState.none;
+          _errorText = "Không thể mở chuyển tiếp";
+        });
+        Navigator.of(context).pop();
+      }
+    }
+  }
 
   Future<void> _handleRecall() async {
     final confirmed = await ConfirmDialog.show(
@@ -179,7 +242,6 @@ class _MessageOptionState extends State<MessageOption>
         "toUserId": widget.otherUserId,
       });
 
-
       if (mounted) {
         Navigator.of(context).pop();
         widget.onSuccess(MessageOptionResult.deleted, _messageId);
@@ -191,10 +253,6 @@ class _MessageOptionState extends State<MessageOption>
       });
     }
   }
-
-  // ─────────────────────────────────────────────
-  // UI
-  // ─────────────────────────────────────────────
 
   Widget _buildBubblePreview() {
     final type = widget.message["type"] ?? "text";
@@ -233,6 +291,77 @@ class _MessageOptionState extends State<MessageOption>
       );
     }
 
+    if (type == "sticker") {
+      final String? imageUrl = content;
+
+      if (imageUrl == null || imageUrl.isEmpty) {
+        return Container(
+          width: 220,
+          height: 160,
+          color: Colors.grey[300],
+          child: const Icon(Icons.broken_image),
+        );
+      }
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.network(
+          imageUrl,
+          width: 220,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 220,
+            height: 160,
+            color: Colors.grey[300],
+            child: const Icon(Icons.broken_image),
+          ),
+        ),
+      );
+    }
+
+    if (type == "file") {
+      String fileName = "Tệp đính kèm";
+
+      if (attachments is List && attachments.isNotEmpty) {
+        final first = attachments.first;
+        if (first is Map<String, dynamic>) {
+          fileName = first["fileName"]?.toString() ?? "Tệp đính kèm";
+        }
+      }
+
+      return Container(
+        width: 240,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isMe
+              ? Colors.blue.withOpacity(0.45)
+              : Colors.white.withOpacity(0.35),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.insert_drive_file_rounded,
+              color: isMe ? Colors.white : Colors.black87,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                fileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isMe ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       constraints: const BoxConstraints(maxWidth: 270),
@@ -242,7 +371,60 @@ class _MessageOptionState extends State<MessageOption>
             : Colors.white.withOpacity(0.35),
         borderRadius: BorderRadius.circular(30),
       ),
-      child: Text(content),
+      child: Text(
+        content.toString(),
+        style: TextStyle(
+          color: isMe ? Colors.white : Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReactionBar() {
+    final blocked = _loadingState != _LoadingState.none;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ..._quickReactions.map((emoji) {
+                return GestureDetector(
+                  onTap: blocked ? null : () => _handleReact(emoji),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 150),
+                      opacity: blocked ? 0.45 : 1,
+                      child: Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              if (_loadingState == _LoadingState.reacting)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -308,7 +490,6 @@ class _MessageOptionState extends State<MessageOption>
                     style: const TextStyle(color: Colors.red),
                   ),
                 ),
-
               if (isMe)
                 _buildMenuRow(
                   icon: Icons.undo,
@@ -316,7 +497,6 @@ class _MessageOptionState extends State<MessageOption>
                   onTap: _handleRecall,
                   isLoading: _loadingState == _LoadingState.recalling,
                 ),
-
               if (isMe)
                 _buildMenuRow(
                   icon: Icons.delete_outline,
@@ -325,7 +505,17 @@ class _MessageOptionState extends State<MessageOption>
                   isDestructive: true,
                   isLoading: _loadingState == _LoadingState.deleting,
                 ),
-
+              _buildMenuRow(
+                icon: Icons.reply,
+                label: "Trả lời",
+                onTap: _handleReply,
+              ),
+              _buildMenuRow(
+                icon: Icons.forward,
+                label: "Chuyển tiếp",
+                onTap: _handleForward,
+                isLoading: _loadingState == _LoadingState.forwarding,
+              ),
               _buildMenuRow(
                 icon: Icons.close,
                 label: "Hủy",
@@ -341,8 +531,7 @@ class _MessageOptionState extends State<MessageOption>
 
   @override
   Widget build(BuildContext context) {
-    final align =
-    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final align = isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start;
 
     return Material(
       color: Colors.transparent,
@@ -359,16 +548,20 @@ class _MessageOptionState extends State<MessageOption>
                   crossAxisAlignment: align,
                   children: [
                     const Spacer(),
-
                     ScaleTransition(
                       scale: _bubbleScale,
                       alignment:
                       isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: _buildBubblePreview(),
                     ),
-
+                    const SizedBox(height: 14),
+                    ScaleTransition(
+                      scale: _bubbleScale,
+                      alignment:
+                      isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: _buildReactionBar(),
+                    ),
                     const SizedBox(height: 20),
-
                     AnimatedBuilder(
                       animation: _menuSlide,
                       builder: (_, child) => Transform.translate(
@@ -383,7 +576,6 @@ class _MessageOptionState extends State<MessageOption>
                         child: _buildMenu(),
                       ),
                     ),
-
                     const Spacer(),
                   ],
                 ),
