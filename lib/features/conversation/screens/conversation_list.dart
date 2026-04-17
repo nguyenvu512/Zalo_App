@@ -74,6 +74,29 @@ class _ConversationListState extends State<ConversationList> {
 
     return null;
   }
+  String _stripHtml(String input) {
+    var text = input;
+
+    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'<li>', caseSensitive: false), '• ');
+    text = text.replaceAll(RegExp(r'</li>', caseSensitive: false), '\n');
+
+    text = text.replaceAll(RegExp(r'<[^>]*>'), '');
+
+    text = text
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+
+    text = text.replaceAll(RegExp(r'\n+'), ' ');
+    text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return text;
+  }
 
   String _getConversationName(Map<String, dynamic> item) {
     final type = (item["type"] ?? "direct").toString();
@@ -117,18 +140,66 @@ class _ConversationListState extends State<ConversationList> {
     if (lastMsg["isDeleted"] == true) return "Tin nhắn đã bị xóa";
 
     final type = lastMsg["type"] ?? "text";
+    final content = _stripHtml((lastMsg["content"] ?? "").toString());
+    final attachments = lastMsg["attachments"] as List? ?? [];
+
+    final hasAttachments = attachments.isNotEmpty;
 
     switch (type) {
       case "text":
-        return (lastMsg["content"] ?? "").toString();
+        return content.isNotEmpty ? content : "Tin nhắn";
+
       case "sticker":
         return "Sticker";
       case "image":
-        return "📷 Hình ảnh";
+        return "🖼 Hình ảnh";
+
       case "file":
         return "📎 Tệp đính kèm";
+
+      case "audio":
+        return "🎵 Âm thanh";
+
+      case "video":
+        return "🎬 Video";
+
+      case "mixed":
+        if (hasAttachments) {
+          final first = attachments.first;
+
+          final attachmentType = first is Map
+              ? (first["type"]?.toString() ?? "")
+              : "";
+
+          if (attachmentType == "image") {
+            return content.isNotEmpty
+                ? "🖼 $content"
+                : "🖼 Hình ảnh";
+          }
+
+          if (attachmentType == "file") {
+            return content.isNotEmpty
+                ? "📎 $content"
+                : "📎 Tệp đính kèm";
+          }
+
+          if (attachmentType == "audio") {
+            return content.isNotEmpty
+                ? "🎵 $content"
+                : "🎵 Âm thanh";
+          }
+
+          if (attachmentType == "video") {
+            return content.isNotEmpty
+                ? "🎬 $content"
+                : "🎬 Video";
+          }
+        }
+
+        return content.isNotEmpty ? content : "Tin nhắn";
+
       default:
-        return "Tin nhắn mới";
+        return content.isNotEmpty ? content : "Tin nhắn mới";
     }
   }
 
@@ -196,21 +267,35 @@ class _ConversationListState extends State<ConversationList> {
           lastMessage: _getLastMessage(item),
           time: _getLastTime(item),
           unreadCount: 0,
-          type: type,
+            type: type,
           onTap: () async {
-            await context.push(
-              AppRoutes.chatScreen,
-              extra: {
-                "conversationId": conversationId,
-                "otherUserId": otherUserId,
-                "name": name,
-                "avatar": avatar,
-                "type": type, // (tuỳ chọn) truyền sang chat screen
-              },
-            );
+              const chatbotUserId = "680000000000000000000001";
 
-            await fetchData();
-          },
+              if (otherUserId == chatbotUserId) {
+                // 👉 mở ChatBotScreen
+                await context.push(
+                  AppRoutes.chatbotScreen,
+                  extra: {
+                    "conversationId": conversationId,
+                    "name": name,
+                    "avatar": avatar,
+                  },
+                );
+              } else {
+                // 👉 mở ChatScreen bình thường
+                await context.push(
+                  AppRoutes.chatScreen,
+                  extra: {
+                    "conversationId": conversationId,
+                    "otherUserId": otherUserId,
+                    "name": name,
+                    "avatar": avatar,
+                    "type": type, // (tuỳ chọn) truyền sang chat screen
+              },
+                );
+               await fetchData();
+              }
+            },
         );
       },
     );

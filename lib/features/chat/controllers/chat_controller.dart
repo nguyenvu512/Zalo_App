@@ -159,6 +159,47 @@ class ChatController {
       rethrow;
     }
   }
+  Future<Map<String, dynamic>> sendChatbotMessage({
+    required String conversationId,
+    required String content,
+    String? replyToMessageId,
+  }) async {
+    try {
+      final token = await storage.read(key: "access_token");
+
+      final url = Uri.parse("${ApiConstants.baseUrl}/message/chatbot");
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "conversationId": conversationId,
+          "content": content,
+          if (replyToMessageId != null) "replyToMessageId": replyToMessageId,
+        }),
+      );
+
+      // 🔥 check lỗi HTML (rất hay gặp)
+      if (response.body.trim().startsWith("<")) {
+        throw Exception("Server trả về HTML (có thể lỗi CORS / route)");
+      }
+
+      final data = jsonDecode(response.body);
+
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          data["code"] == 1000) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data["message"] ?? "Chatbot error");
+      }
+    } catch (e) {
+      print("❌ Chatbot Exception: $e");
+      rethrow;
+    }
+  }
 
   Future<Map<String, dynamic>> reactMessage({
     required String messageId,

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/features/auth/screens/forgotPassword_screen.dart';
+import 'package:zalo_mobile_app/features/chat/screens/chat_bot_screen.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_screen.dart';
 import 'package:zalo_mobile_app/features/contact_screen/screens/add_contact_screen.dart';
 import 'package:zalo_mobile_app/features/contact_screen/screens/contact_screen.dart';
@@ -63,6 +64,20 @@ final GoRouter router = GoRouter(
           name: data?['name'] ?? "No name",
           avatar: data?['avatar'] ?? "",
           type: data?['type'] ?? "",
+        );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.chatbotScreen,
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>;
+
+        return ChatBotScreen(
+          conversation: {
+            "_id": data["conversationId"],
+            "name": data["name"],
+            "avatarUrl": data["avatar"],
+          },
         );
       },
     ),

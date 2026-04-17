@@ -11,4 +11,5 @@ class AppRoutes {
   static const String addContactScreen = '/addContactScreen';
   static const createGroupScreen = "/create-group";
   static const createGroupInfoScreen = "/create-group-info";
+  static const String chatbotScreen = "/chatbot";
 }
