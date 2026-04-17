@@ -16,6 +16,9 @@ class ChatController {
     required String content,
     required String type, // text | image | audio | sticker | file
     File? file,
+    replyToMessageId,
+    bool isForwarded = false,
+    List<Map<String, dynamic>> attachments = const [],
   }) async {
     try {
       final token = await storage.read(key: "access_token");
@@ -29,6 +32,11 @@ class ChatController {
       request.fields['senderId'] = senderId;
       request.fields['content'] = content;
       request.fields['type'] = type; // 🔥 QUAN TRỌNG
+      request.fields['isForwarded'] = isForwarded.toString();
+      request.fields['replyToMessageId'] = replyToMessageId ?? "";
+      if (attachments.isNotEmpty) {
+        request.fields["attachments"] = jsonEncode(attachments);
+      }
 
       // =========================
       // FILE UPLOAD
@@ -191,6 +199,33 @@ class ChatController {
       print("❌ Chatbot Exception: $e");
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> reactMessage({
+    required String messageId,
+    required String emoji,
+  }) async {
+    final token = await storage.read(key: "access_token");
+
+    final res = await http.post(
+      Uri.parse("${ApiConstants.baseUrl}/message/reaction"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        "messageId": messageId,
+        "emoji": emoji,
+      }),
+    );
+
+    final data = jsonDecode(res.body);
+
+    if (res.statusCode == 200 && data["code"] == 1000) {
+      return data;
+    }
+
+    throw Exception(data["message"] ?? "Thả cảm xúc thất bại");
   }
 
 

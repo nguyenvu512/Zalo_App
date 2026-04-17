@@ -63,6 +63,7 @@ final GoRouter router = GoRouter(
           otherUserId: data?['otherUserId'] ?? "",
           name: data?['name'] ?? "No name",
           avatar: data?['avatar'] ?? "",
+          type: data?['type'] ?? "",
         );
       },
     ),

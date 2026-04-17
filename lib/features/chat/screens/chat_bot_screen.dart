@@ -288,10 +288,16 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       itemBuilder: (context, index) {
         if (index < messages.length) {
           final msg = messages[index];
-          return ChatMessage(message: msg);
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: ChatMessage(message: msg),
+          );
         }
 
-        return _buildTypingIndicator();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: _buildTypingIndicator(),
+        );
       },
     );
   }
@@ -339,7 +345,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
             right: 0,
             child: ChatAppBar(
               name: botName,
-              avatar: botAvatar,
+              avatar: botAvatar, type: '',
             ),
           ),
         ],

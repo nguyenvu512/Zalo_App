@@ -5,6 +5,7 @@ class ConversationItem extends StatelessWidget {
   final String avatarUrl;
   final String lastMessage;
   final String time;
+  final String type;
   final int unreadCount;
   final VoidCallback onTap;
 
@@ -14,6 +15,7 @@ class ConversationItem extends StatelessWidget {
     required this.avatarUrl,
     required this.lastMessage,
     required this.time,
+    required this.type,
     required this.onTap,
     this.unreadCount = 0,
   });
@@ -29,7 +31,14 @@ class ConversationItem extends StatelessWidget {
             /// Avatar
             CircleAvatar(
               radius: 25,
-              backgroundImage: NetworkImage(avatarUrl),
+              backgroundImage: (type != 'group' && avatarUrl.isNotEmpty)
+                  ? NetworkImage(avatarUrl)
+                  : null,
+              child: type == 'group'
+                  ? const Icon(Icons.group)
+                  : avatarUrl.isEmpty
+                  ? const Icon(Icons.person)
+                  : null,
             ),
 
             const SizedBox(width: 12),
@@ -41,20 +50,24 @@ class ConversationItem extends StatelessWidget {
                 children: [
                   /// Name + Time
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                          color: unreadCount > 0
-                              ? const Color(0xFF111111) // unread
-                              : const Color(0xFF666666), // read
-                          fontWeight: unreadCount > 0
-                              ? FontWeight.bold
-                              : FontWeight.w500,
-                          fontSize: 16,
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: unreadCount > 0
+                                ? const Color(0xFF111111)
+                                : const Color(0xFF666666),
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         time,
                         style: const TextStyle(
@@ -77,19 +90,18 @@ class ConversationItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: unreadCount > 0
-                                ? const Color(0xFF333333) // unread
-                                : const Color(0xFF999999), // read
+                                ? const Color(0xFF333333)
+                                : const Color(0xFF999999),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-
                       if (unreadCount > 0)
                         Container(
                           margin: const EdgeInsets.only(left: 8),
                           padding: const EdgeInsets.all(6),
                           decoration: const BoxDecoration(
-                            color: const Color.fromARGB(255, 3, 133, 10),
+                            color: Color.fromARGB(255, 3, 133, 10),
                             shape: BoxShape.circle,
                           ),
                           child: Text(
