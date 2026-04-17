@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/common/popups/custom_dialog.dart';
 import 'package:zalo_mobile_app/common/widgets/custom_text_field.dart';
@@ -138,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
             Container(
               color: Colors.black.withOpacity(0.3),
               child: const Center(
-                child: CircularProgressIndicator(),
+                child:  CircularProgressIndicator()
               ),
             ),
         ],
