@@ -339,7 +339,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
             right: 0,
             child: ChatAppBar(
               name: botName,
-              avatar: botAvatar,
+              avatar: botAvatar, type: '',
             ),
           ),
         ],
