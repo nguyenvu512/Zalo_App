@@ -8,16 +8,27 @@ import 'package:zalo_mobile_app/features/chat/screens/forward_message_popup.dart
 import 'package:zalo_mobile_app/services/socket_service.dart';
 
 enum MessageOptionResult { deleted, recalled, replied }
-enum _LoadingState { none, recalling, deleting, forwarding, reacting }
+
+enum _LoadingState {
+  none,
+  recalling,
+  deleting,
+  forwarding,
+  reacting,
+  pinning,
+  unpinning,
+}
 
 class MessageOption extends StatefulWidget {
   final Map<String, dynamic> message;
+  final String conversationId;
   final void Function(MessageOptionResult result, String messageId) onSuccess;
   final String? otherUserId;
 
   const MessageOption({
     super.key,
     required this.message,
+    required this.conversationId,
     required this.onSuccess,
     required this.otherUserId,
   });
@@ -25,6 +36,7 @@ class MessageOption extends StatefulWidget {
   static Future<Map<String, dynamic>?> show({
     required BuildContext context,
     required Map<String, dynamic> message,
+    required String conversationId,
     required String? otherUserId,
     required void Function(MessageOptionResult result, String messageId)
     onSuccess,
@@ -40,6 +52,7 @@ class MessageOption extends StatefulWidget {
         reverseTransitionDuration: const Duration(milliseconds: 200),
         pageBuilder: (_, __, ___) => MessageOption(
           message: message,
+          conversationId: conversationId,
           onSuccess: onSuccess,
           otherUserId: otherUserId,
         ),
@@ -111,7 +124,13 @@ class _MessageOptionState extends State<MessageOption>
 
   bool get isMe => widget.message["senderId"]?["_id"] == _currentUserId;
 
-  String get conversationId => widget.message["conversationId"] ?? "";
+  bool get _isPinned {
+    final raw = widget.message["isPinned"];
+    if (raw is bool) return raw;
+    return false;
+  }
+
+  String get conversationId => widget.conversationId;
 
   void _dismiss() => Navigator.of(context).pop();
 
@@ -141,13 +160,82 @@ class _MessageOptionState extends State<MessageOption>
       final updatedMessage = Map<String, dynamic>.from(res["result"]);
 
       if (mounted) {
-        Navigator.of(context).pop(updatedMessage);
+        Navigator.of(context).pop({
+          "action": "reaction",
+          "message": updatedMessage,
+        });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loadingState = _LoadingState.none;
         _errorText = "Thả cảm xúc thất bại";
+      });
+    }
+  }
+
+  Future<void> _handlePin() async {
+    if (_loadingState != _LoadingState.none) return;
+
+    setState(() {
+      _loadingState = _LoadingState.pinning;
+      _errorText = null;
+    });
+
+    try {
+      final res = await chatController.pinMessage(
+        conversationId: conversationId,
+        messageId: _messageId,
+      );
+
+      final pinned = (res["result"]["pinnedMessages"] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      if (mounted) {
+        Navigator.of(context).pop({
+          "action": "pin",
+          "pinnedMessages": pinned,
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingState = _LoadingState.none;
+        _errorText = "Ghim tin nhắn thất bại";
+      });
+    }
+  }
+
+  Future<void> _handleUnpin() async {
+    if (_loadingState != _LoadingState.none) return;
+
+    setState(() {
+      _loadingState = _LoadingState.unpinning;
+      _errorText = null;
+    });
+
+    try {
+      final res = await chatController.unpinMessage(
+        conversationId: conversationId,
+        messageId: _messageId,
+      );
+
+      final pinned = (res["result"]["pinnedMessages"] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      if (mounted) {
+        Navigator.of(context).pop({
+          "action": "unpin",
+          "pinnedMessages": pinned,
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingState = _LoadingState.none;
+        _errorText = "Bỏ ghim thất bại";
       });
     }
   }
@@ -383,45 +471,54 @@ class _MessageOptionState extends State<MessageOption>
   Widget _buildReactionBar() {
     final blocked = _loadingState != _LoadingState.none;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ..._quickReactions.map((emoji) {
-                return GestureDetector(
-                  onTap: blocked ? null : () => _handleReact(emoji),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 150),
-                      opacity: blocked ? 0.45 : 1,
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 24),
+    return ClipRect(
+      child: ScaleTransition(
+        scale: _bubbleScale,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.96),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ..._quickReactions.map((emoji) {
+                  return GestureDetector(
+                    onTap: blocked ? null : () => _handleReact(emoji),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 150),
+                        opacity: blocked ? 0.45 : 1,
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 26),
+                        ),
                       ),
                     ),
+                  );
+                }),
+                if (_loadingState == _LoadingState.reacting)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   ),
-                );
-              }),
-              if (_loadingState == _LoadingState.reacting)
-                const Padding(
-                  padding: EdgeInsets.only(left: 6),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -511,6 +608,14 @@ class _MessageOptionState extends State<MessageOption>
                 onTap: _handleReply,
               ),
               _buildMenuRow(
+                icon: _isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                label: _isPinned ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn",
+                onTap: _isPinned ? _handleUnpin : _handlePin,
+                isLoading: _isPinned
+                    ? _loadingState == _LoadingState.unpinning
+                    : _loadingState == _LoadingState.pinning,
+              ),
+              _buildMenuRow(
                 icon: Icons.forward,
                 label: "Chuyển tiếp",
                 onTap: _handleForward,
@@ -555,12 +660,7 @@ class _MessageOptionState extends State<MessageOption>
                       child: _buildBubblePreview(),
                     ),
                     const SizedBox(height: 14),
-                    ScaleTransition(
-                      scale: _bubbleScale,
-                      alignment:
-                      isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: _buildReactionBar(),
-                    ),
+                    _buildReactionBar(),
                     const SizedBox(height: 20),
                     AnimatedBuilder(
                       animation: _menuSlide,
