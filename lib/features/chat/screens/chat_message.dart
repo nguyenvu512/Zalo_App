@@ -6,11 +6,15 @@ import 'package:url_launcher/url_launcher.dart';
 class ChatMessage extends StatefulWidget {
   final Map<String, dynamic> message;
   final VoidCallback? onLongPress;
+  final VoidCallback? onReplyTap;
+  final bool isHighlighted;
 
   const ChatMessage({
     super.key,
     required this.message,
     this.onLongPress,
+    this.onReplyTap,
+    this.isHighlighted = false,
   });
 
   @override
@@ -121,7 +125,7 @@ class _ChatMessageState extends State<ChatMessage> {
         }
       }
     }
-    
+
     if (_type == "sticker") {
       return widget.message["content"] ?? "";
     }
@@ -514,9 +518,6 @@ class _ChatMessageState extends State<ChatMessage> {
         case "file":
           messageContent = _buildFileMessage();
           break;
-        case "mixed":
-          messageContent = _buildMixedMessage(context);
-          break;
         case "text":
         default:
           messageContent = _buildTextMessage();
@@ -526,7 +527,26 @@ class _ChatMessageState extends State<ChatMessage> {
 
     Widget body = GestureDetector(
       onLongPress: _recalled ? null : widget.onLongPress,
-      child: messageContent,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        padding: widget.isHighlighted
+            ? const EdgeInsets.all(4)
+            : EdgeInsets.zero,
+        decoration: BoxDecoration(
+          color: widget.isHighlighted
+              ? Colors.yellow.withOpacity(0.22)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: widget.isHighlighted
+              ? Border.all(
+            color: Colors.yellow.withOpacity(0.55),
+            width: 1.2,
+          )
+              : null,
+        ),
+        child: messageContent,
+      ),
     );
 
     if (_isGroup && !_isMe) {
@@ -589,55 +609,58 @@ class _ChatMessageState extends State<ChatMessage> {
       senderName = sender["fullName"]?.toString() ?? "Người dùng";
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: _isMe
-            ? Colors.white.withOpacity(0.14)
-            : Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 3,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _isMe ? Colors.white70 : Colors.blue,
-              borderRadius: BorderRadius.circular(3),
+    return GestureDetector(
+      onTap: widget.onReplyTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: _isMe
+              ? Colors.white.withOpacity(0.14)
+              : Colors.black.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 3,
+              height: 32,
+              decoration: BoxDecoration(
+                color: _isMe ? Colors.white70 : Colors.blue,
+                borderRadius: BorderRadius.circular(3),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  senderName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _isMe ? Colors.white : Colors.black87,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    senderName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _isMe ? Colors.white : Colors.black87,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _getReplyBlockText(replied),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: _isMe ? Colors.white70 : Colors.black54,
+                  const SizedBox(height: 2),
+                  Text(
+                    _getReplyBlockText(replied),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _isMe ? Colors.white70 : Colors.black54,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -649,9 +672,11 @@ class _ChatMessageState extends State<ChatMessage> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
         constraints: const BoxConstraints(maxWidth: 260),
         decoration: BoxDecoration(
-          color: _isMe
+          color: widget.isHighlighted
+              ? Colors.yellow.withOpacity(0.35)
+              : (_isMe
               ? Colors.blue.withOpacity(0.3)
-              : Colors.white.withOpacity(0.3),
+              : Colors.white.withOpacity(0.3)),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: Colors.white.withOpacity(0.25)),
         ),
@@ -797,28 +822,36 @@ class _ChatMessageState extends State<ChatMessage> {
                 ),
               );
             },
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                _content,
-                width: stickerWidth,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
+            child: Container(
+              decoration: BoxDecoration(
+                color: widget.isHighlighted
+                    ? Colors.yellow.withOpacity(0.35)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  _content,
+                  width: stickerWidth,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      width: stickerWidth,
+                      height: stickerWidth,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => Container(
                     width: stickerWidth,
                     height: stickerWidth,
                     color: Colors.grey[300],
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                },
-                errorBuilder: (_, __, ___) => Container(
-                  width: stickerWidth,
-                  height: stickerWidth,
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.broken_image),
+                    child: const Icon(Icons.broken_image),
+                  ),
                 ),
               ),
             ),
@@ -838,8 +871,11 @@ class _ChatMessageState extends State<ChatMessage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color:
-        _isMe ? Colors.blue.withOpacity(0.3) : Colors.white.withOpacity(0.3),
+        color: widget.isHighlighted
+            ? Colors.yellow.withOpacity(0.35)
+            : (_isMe
+            ? Colors.blue.withOpacity(0.3)
+            : Colors.white.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
@@ -870,8 +906,11 @@ class _ChatMessageState extends State<ChatMessage> {
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
       constraints: const BoxConstraints(maxWidth: 250),
       decoration: BoxDecoration(
-        color:
-        _isMe ? Colors.blue.withOpacity(0.3) : Colors.white.withOpacity(0.3),
+        color: widget.isHighlighted
+            ? Colors.yellow.withOpacity(0.35)
+            : (_isMe
+            ? Colors.blue.withOpacity(0.3)
+            : Colors.white.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: Colors.white.withOpacity(0.3)),
       ),
@@ -991,26 +1030,34 @@ class _ChatMessageState extends State<ChatMessage> {
                 ),
               );
             },
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(30),
-              child: Image.network(
-                _content,
-                width: imageWidth,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
+            child: Container(
+              decoration: BoxDecoration(
+                color: widget.isHighlighted
+                    ? Colors.yellow.withOpacity(0.35)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: Image.network(
+                  _content,
+                  width: imageWidth,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      width: imageWidth,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => Container(
                     width: imageWidth,
                     color: Colors.grey[300],
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                },
-                errorBuilder: (_, __, ___) => Container(
-                  width: imageWidth,
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.broken_image),
+                    child: const Icon(Icons.broken_image),
+                  ),
                 ),
               ),
             ),
@@ -1025,112 +1072,5 @@ class _ChatMessageState extends State<ChatMessage> {
       ),
     );
   }
-  Widget _buildMixedMessage(BuildContext context) {
-    final attachments = widget.message["attachments"] as List? ?? [];
-    final maxWidth = MediaQuery.of(context).size.width * 0.72;
 
-    return Container(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      decoration: BoxDecoration(
-        color: _isMe ? Colors.blueAccent : Colors.white,
-        borderRadius: BorderRadius.circular(18).copyWith(
-          bottomRight: _isMe ? const Radius.circular(6) : null,
-          bottomLeft: !_isMe ? const Radius.circular(6) : null,
-        ),
-        border: !_isMe
-            ? Border.all(color: Colors.black.withOpacity(0.05))
-            : null,
-        boxShadow: !_isMe
-            ? [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ]
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_content.trim().isNotEmpty) _buildContentWidget(),
-          if (_content.trim().isNotEmpty && attachments.isNotEmpty)
-            const SizedBox(height: 10),
-
-          ...attachments.map((att) {
-            if (att["type"] == "image" && att["url"] != null) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => Dialog(
-                        backgroundColor: Colors.black,
-                        child: InteractiveViewer(
-                          child: Image.network(att["url"].toString()),
-                        ),
-                      ),
-                    );
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.network(
-                      att["url"].toString(),
-                      width: maxWidth - 24,
-                      height: 170,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          width: maxWidth - 24,
-                          height: 170,
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) => Container(
-                        width: maxWidth - 24,
-                        height: 170,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.broken_image),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            return Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(att["fileName"]?.toString() ?? "File"),
-            );
-          }),
-
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(_createdAt),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: _isMe ? Colors.white70 : Colors.black38,
-                  ),
-                ),
-                if (_isMe) ...[
-                  const SizedBox(width: 4),
-                  _buildStatusIcon(),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

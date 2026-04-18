@@ -72,12 +72,16 @@ class ChatController {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMessages(String conversationId) async {
+  Future<List<Map<String, dynamic>>> getMessages(
+      String conversationId, {
+        int page = 1,
+        int limit = 20,
+      }) async {
     try {
       final token = await storage.read(key: "access_token");
 
       final url = Uri.parse(
-        "${ApiConstants.baseUrl}/message/conversation/$conversationId",
+        "${ApiConstants.baseUrl}/message/conversation/$conversationId?page=$page&limit=$limit",
       );
 
       final response = await http.get(
@@ -92,11 +96,9 @@ class ChatController {
 
       if (response.statusCode == 200 && data['code'] == 1000) {
         final List list = data['result']['data'];
-
-        // ✅ ÉP KIỂU CHUẨN
         return list.map((e) => Map<String, dynamic>.from(e)).toList();
       } else {
-        throw Exception("Load messages error");
+        throw Exception(data['message'] ?? "Load messages error");
       }
     } catch (e) {
       print("❌ Lỗi load message: $e");
@@ -227,6 +229,104 @@ class ChatController {
 
     throw Exception(data["message"] ?? "Thả cảm xúc thất bại");
   }
+  Future<Map<String, dynamic>> pinMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    try {
+      final token = await storage.read(key: "access_token");
 
+      final url = Uri.parse("${ApiConstants.baseUrl}/conversation/pin");
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "conversationId": conversationId,
+          "messageId": messageId,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data["code"] == 1000) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data["message"] ?? "Pin message error");
+      }
+    } catch (e) {
+      print("❌ Lỗi pin message: $e");
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> unpinMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    try {
+      final token = await storage.read(key: "access_token");
+
+      final url = Uri.parse("${ApiConstants.baseUrl}/conversation/pin");
+
+      final response = await http.delete(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "conversationId": conversationId,
+          "messageId": messageId,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data["code"] == 1000) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data["message"] ?? "Unpin message error");
+      }
+    } catch (e) {
+      print("❌ Lỗi unpin message: $e");
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPinnedMessages({
+    required String conversationId,
+  }) async {
+    try {
+      final token = await storage.read(key: "access_token");
+
+      final url = Uri.parse(
+        "${ApiConstants.baseUrl}/conversation/pinned/$conversationId",
+      );
+
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data["code"] == 1000) {
+        final List list = data["result"];
+        return list.map((e) => Map<String, dynamic>.from(e)).toList();
+      } else {
+        throw Exception(data["message"] ?? "Get pinned messages error");
+      }
+    } catch (e) {
+      print("❌ Lỗi get pinned messages: $e");
+      rethrow;
+    }
+  }
 
 }
