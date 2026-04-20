@@ -24,6 +24,7 @@ class MessageOption extends StatefulWidget {
   final String conversationId;
   final void Function(MessageOptionResult result, String messageId) onSuccess;
   final String? otherUserId;
+  final String? chatType;
 
   const MessageOption({
     super.key,
@@ -31,6 +32,7 @@ class MessageOption extends StatefulWidget {
     required this.conversationId,
     required this.onSuccess,
     required this.otherUserId,
+    required this.chatType,
   });
 
   static Future<Map<String, dynamic>?> show({
@@ -38,6 +40,7 @@ class MessageOption extends StatefulWidget {
     required Map<String, dynamic> message,
     required String conversationId,
     required String? otherUserId,
+    required String? chatType,
     required void Function(MessageOptionResult result, String messageId)
     onSuccess,
   }) {
@@ -55,6 +58,7 @@ class MessageOption extends StatefulWidget {
           conversationId: conversationId,
           onSuccess: onSuccess,
           otherUserId: otherUserId,
+          chatType: chatType,
         ),
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
@@ -120,9 +124,15 @@ class _MessageOptionState extends State<MessageOption>
     super.dispose();
   }
 
-  String get _messageId => widget.message["_id"] ?? widget.message["id"] ?? "";
+  String get _messageId => widget.message["_id"]?.toString() ?? "";
 
-  bool get isMe => widget.message["senderId"]?["_id"] == _currentUserId;
+  bool get isMe {
+    final sender = widget.message["senderId"];
+    if (sender is Map<String, dynamic>) {
+      return sender["_id"]?.toString() == _currentUserId;
+    }
+    return sender?.toString() == _currentUserId;
+  }
 
   bool get _isPinned {
     final raw = widget.message["isPinned"];
@@ -131,6 +141,17 @@ class _MessageOptionState extends State<MessageOption>
   }
 
   String get conversationId => widget.conversationId;
+
+  String get _chatType {
+    final raw = widget.chatType?.toString().trim();
+    if (raw == "group") return "group";
+    return "direct";
+  }
+
+  String? get _groupId => _chatType == "group" ? widget.conversationId : null;
+
+  String? get _directToUserId =>
+      _chatType == "direct" ? widget.otherUserId : null;
 
   void _dismiss() => Navigator.of(context).pop();
 
@@ -158,6 +179,14 @@ class _MessageOptionState extends State<MessageOption>
       );
 
       final updatedMessage = Map<String, dynamic>.from(res["result"]);
+
+      SocketService().emit("react_message", {
+        "type": _chatType,
+        "toUserId": _directToUserId,
+        "groupId": _groupId,
+        "userId": _currentUserId,
+        "message": updatedMessage,
+      });
 
       if (mounted) {
         Navigator.of(context).pop({
@@ -192,6 +221,19 @@ class _MessageOptionState extends State<MessageOption>
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
+      final socketMessage = {
+        ...widget.message,
+        "isPinned": true,
+      };
+
+      SocketService().emit("pin_message", {
+        "type": _chatType,
+        "toUserId": _directToUserId,
+        "groupId": _groupId,
+        "userId": _currentUserId,
+        "message": socketMessage,
+      });
+
       if (mounted) {
         Navigator.of(context).pop({
           "action": "pin",
@@ -224,6 +266,19 @@ class _MessageOptionState extends State<MessageOption>
       final pinned = (res["result"]["pinnedMessages"] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+
+      final socketMessage = {
+        ...widget.message,
+        "isPinned": false,
+      };
+
+      SocketService().emit("unpin_message", {
+        "type": _chatType,
+        "toUserId": _directToUserId,
+        "groupId": _groupId,
+        "userId": _currentUserId,
+        "message": socketMessage,
+      });
 
       if (mounted) {
         Navigator.of(context).pop({
@@ -291,8 +346,11 @@ class _MessageOptionState extends State<MessageOption>
       await chatController.revokeMessage(_messageId);
 
       SocketService().emit("recall_message", {
-        "toUserId": widget.otherUserId,
+        "type": _chatType,
+        "toUserId": _directToUserId,
+        "groupId": _groupId,
         "messageId": _messageId,
+        "conversationId": conversationId,
       });
 
       if (mounted) {
@@ -477,7 +535,8 @@ class _MessageOptionState extends State<MessageOption>
         child: Material(
           color: Colors.transparent,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            constraints: const BoxConstraints(maxWidth: 280),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.96),
               borderRadius: BorderRadius.circular(26),
@@ -489,20 +548,26 @@ class _MessageOptionState extends State<MessageOption>
                 ),
               ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 ..._quickReactions.map((emoji) {
                   return GestureDetector(
                     onTap: blocked ? null : () => _handleReact(emoji),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 150),
-                        opacity: blocked ? 0.45 : 1,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 150),
+                      opacity: blocked ? 0.45 : 1,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
                         child: Text(
                           emoji,
-                          style: const TextStyle(fontSize: 26),
+                          style: const TextStyle(fontSize: 24, height: 1),
                         ),
                       ),
                     ),
@@ -510,7 +575,7 @@ class _MessageOptionState extends State<MessageOption>
                 }),
                 if (_loadingState == _LoadingState.reacting)
                   const Padding(
-                    padding: EdgeInsets.only(left: 6),
+                    padding: EdgeInsets.only(left: 4),
                     child: SizedBox(
                       width: 16,
                       height: 16,
@@ -559,7 +624,14 @@ class _MessageOptionState extends State<MessageOption>
             else
               Icon(icon, size: 19, color: color),
             const SizedBox(width: 14),
-            Text(label, style: TextStyle(fontSize: 15, color: color)),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 15, color: color),
+              ),
+            ),
           ],
         ),
       ),
@@ -672,7 +744,7 @@ class _MessageOptionState extends State<MessageOption>
                         ),
                       ),
                       child: SizedBox(
-                        width: 220,
+                        width: 240,
                         child: _buildMenu(),
                       ),
                     ),

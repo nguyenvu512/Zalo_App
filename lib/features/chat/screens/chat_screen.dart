@@ -78,6 +78,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _scrollController.addListener(_onScroll);
 
+    SocketService().listenEvent("receive_message");
+    SocketService().listenEvent("receive_group_message");
+    SocketService().listenEvent("message_recalled");
+    SocketService().listenEvent("message_deleted");
+    SocketService().listenEvent("message_reacted");
+    SocketService().listenEvent("message_pinned");
+    SocketService().listenEvent("message_unpinned");
+    SocketService().listenEvent("group_disbanded");
+    SocketService().listenEvent("removed_from_group");
+
     _socketSub = SocketService().eventsStream.listen((event) {
       final eventName = event["event"];
       final data = event["data"];
@@ -90,10 +100,41 @@ class _ChatScreenState extends State<ChatScreen> {
           Map<String, dynamic> message;
 
           if (raw is String) {
-            message = jsonDecode(raw);
+            message = Map<String, dynamic>.from(jsonDecode(raw));
           } else {
             message = Map<String, dynamic>.from(raw);
           }
+
+          message["chatType"] = "direct";
+
+          final incomingId = message["_id"]?.toString();
+          final existed =
+          messages.any((m) => m["_id"]?.toString() == incomingId);
+
+          if (existed) return;
+
+          setState(() {
+            messages.insert(0, message);
+          });
+          break;
+
+        case "receive_group_message":
+          final raw = data["message"];
+          Map<String, dynamic> message;
+
+          if (raw is String) {
+            message = Map<String, dynamic>.from(jsonDecode(raw));
+          } else {
+            message = Map<String, dynamic>.from(raw);
+          }
+
+          message["chatType"] = "group";
+
+          final incomingId = message["_id"]?.toString();
+          final existed =
+          messages.any((m) => m["_id"]?.toString() == incomingId);
+
+          if (existed) return;
 
           setState(() {
             messages.insert(0, message);
@@ -123,6 +164,96 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
           break;
+
+        case "message_reacted":
+          final updated = Map<String, dynamic>.from(data["message"]);
+          final messageId = updated["_id"]?.toString();
+
+          if (messageId == null || messageId.isEmpty) break;
+
+          setState(() {
+            final i = messages.indexWhere(
+                  (m) => m["_id"]?.toString() == messageId,
+            );
+
+            if (i != -1) {
+              messages[i] = {
+                ...messages[i],
+                ...updated,
+              };
+            }
+          });
+          break;
+
+        case "message_pinned":
+          final pinnedMessage = Map<String, dynamic>.from(data["message"]);
+          final pinnedId = pinnedMessage["_id"]?.toString();
+
+          if (pinnedId == null || pinnedId.isEmpty) break;
+
+          setState(() {
+            final i = messages.indexWhere(
+                  (m) => m["_id"]?.toString() == pinnedId,
+            );
+
+            if (i != -1) {
+              messages[i] = {
+                ...messages[i],
+                "isPinned": true,
+              };
+            }
+
+            final existed = pinnedMessages.any((item) {
+              final raw = item["messageId"];
+              if (raw is Map<String, dynamic>) {
+                return raw["_id"]?.toString() == pinnedId;
+              }
+              return false;
+            });
+
+            if (!existed) {
+              pinnedMessages.insert(0, {
+                "messageId": {
+                  ...pinnedMessage,
+                  "isPinned": true,
+                }
+              });
+            }
+          });
+          break;
+
+        case "message_unpinned":
+          final unpinnedMessage = Map<String, dynamic>.from(data["message"]);
+          final unpinnedId = unpinnedMessage["_id"]?.toString();
+
+          if (unpinnedId == null || unpinnedId.isEmpty) break;
+
+          setState(() {
+            final i = messages.indexWhere(
+                  (m) => m["_id"]?.toString() == unpinnedId,
+            );
+
+            if (i != -1) {
+              messages[i] = {
+                ...messages[i],
+                "isPinned": false,
+              };
+            }
+
+            pinnedMessages.removeWhere((item) {
+              final raw = item["messageId"];
+              if (raw is Map<String, dynamic>) {
+                return raw["_id"]?.toString() == unpinnedId;
+              }
+              return false;
+            });
+
+            if (pinnedMessages.isEmpty) {
+              _isPinnedExpanded = false;
+            }
+          });
+          break;
+
         case "group_disbanded":
           if (data is! Map) break;
 
@@ -139,6 +270,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
           context.go(AppRoutes.home);
           break;
+
         case "removed_from_group":
           if (data is! Map) break;
 
@@ -257,6 +389,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return sender["fullName"]?.toString() ?? "Người dùng";
   }
+
   Future<void> _openConversationSettings() async {
     final result = await Navigator.push(
       context,
@@ -301,6 +434,7 @@ class _ChatScreenState extends State<ChatScreen> {
       context.go(AppRoutes.home);
     }
   }
+
   Widget _buildPinnedBar() {
     if (pinnedMessages.isEmpty) return const SizedBox.shrink();
 
@@ -787,11 +921,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final message = res["result"];
 
-      SocketService().emit("send_message", {
-        "userId": userId,
-        "toUserId": widget.otherUserId,
-        "message": message,
-      });
+      if (widget.type == 'group') {
+        SocketService().emit("send_group_message", {
+          "groupId": widget.conversationId,
+          "userId": userId,
+          "message": message,
+        });
+      } else {
+        SocketService().emit("send_message", {
+          "userId": userId,
+          "toUserId": widget.otherUserId,
+          "message": message,
+        });
+      }
 
       setState(() {
         messages[insertedIndex] = Map<String, dynamic>.from(message);
@@ -868,10 +1010,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topPadding = pinnedMessages.isEmpty
-        ? 70.0
-        : (_isPinnedExpanded ? 230.0 : 132.0);
-
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,
@@ -971,6 +1109,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             otherUserId: widget.otherUserId,
                             message: popupMessage,
                             conversationId: widget.conversationId,
+                            chatType: widget.type,
                             onSuccess: (result, messageId) {
                               final i = messages.indexWhere(
                                     (m) => m["_id"] == messageId,
@@ -1036,7 +1175,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             if (action == "pin" || action == "unpin") {
                               final pinned =
                               (result["pinnedMessages"] as List? ?? [])
-                                  .map((e) => Map<String, dynamic>.from(e))
+                                  .map((e) =>
+                              Map<String, dynamic>.from(e))
                                   .toList();
 
                               setState(() {
@@ -1064,7 +1204,6 @@ class _ChatScreenState extends State<ChatScreen> {
               onOpenSettings: _openConversationSettings,
             ),
           ),
-
           if (pinnedMessages.isNotEmpty)
             Positioned(
               top: 78,
