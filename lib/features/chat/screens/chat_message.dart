@@ -335,43 +335,43 @@ class _ChatMessageState extends State<ChatMessage> {
     final grouped = _groupReactions();
     if (grouped.isEmpty) return const SizedBox.shrink();
 
+    final firstEntry = grouped.entries.first;
+    final firstEmoji = firstEntry.key;
+    final totalCount = _reactions.length;
+
     return GestureDetector(
       onTap: _showReactionDetails,
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: grouped.entries.map((entry) {
-          final emoji = entry.key;
-          final count = entry.value.length;
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: firstEmoji,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1,
                 ),
-                if (count > 1) ...[
-                  const SizedBox(width: 3),
-                  Text(
-                    count.toString(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: textColor,
-                      fontWeight: FontWeight.w600,
-                    ),
+              ),
+              if (totalCount > 1)
+                TextSpan(
+                  text: " $totalCount",
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1,
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ],
-            ),
-          );
-        }).toList(),
+                ),
+            ],
+          ),
+          softWrap: false,
+          overflow: TextOverflow.fade,
+        ),
       ),
     );
   }
@@ -959,7 +959,7 @@ class _ChatMessageState extends State<ChatMessage> {
                       const WidgetSpan(
                         alignment: PlaceholderAlignment.baseline,
                         baseline: TextBaseline.alphabetic,
-                        child: SizedBox(width: 56),
+                        child: SizedBox(width: 66),
                       ),
                     ],
                   ),
