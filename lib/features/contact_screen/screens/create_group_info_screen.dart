@@ -67,6 +67,7 @@ class _CreateGroupInfoScreenState extends State<CreateGroupInfoScreen> {
           "otherUserId": null,
           "name": conversation["name"] ?? groupName,
           "avatar": conversation["avatarUrl"] ?? "",
+          "type":"group"
         },
       );
     } catch (e) {

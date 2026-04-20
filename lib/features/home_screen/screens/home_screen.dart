@@ -44,6 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
       SocketService().listenEvent("message_deleted");
       SocketService().listenEvent("notification:new");
       SocketService().listenEvent("notification:badge");
+      SocketService().listenEvent('group_disbanded');
+      SocketService().listenEvent("added_to_group");
+      SocketService().listenEvent("removed_from_group");
       print("✅ Socket initialized in HomeScreen with userId: $userId");
     } else {
       print("❌ Không tìm thấy user_id để connect socket");

@@ -12,4 +12,9 @@ class AppRoutes {
   static const createGroupScreen = "/create-group";
   static const createGroupInfoScreen = "/create-group-info";
   static const String chatbotScreen = "/chatbot";
+  static const String conversationSetting = '/conversation-setting';
+  static const String searchMessage = '/search-message';
+  static const String conversationMedia = '/conversation-media';
+  static const String groupMembers = '/group-members';
+  static const String addGroupMembers = '/add-group-members';
 }

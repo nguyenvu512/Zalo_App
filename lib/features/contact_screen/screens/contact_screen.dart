@@ -113,52 +113,22 @@ class _ContactScreenState extends State<ContactScreen> {
   }
   Future<void> _openChat(Map<String, dynamic> friend) async {
     try {
-      final conversations = await _conversationController.getListConversation();
-
-      if (conversations == null) {
-        throw Exception("Không lấy được danh sách conversation");
-      }
-
       final friendUserId = (friend["userId"] ?? friend["_id"]).toString();
-      Map<String, dynamic>? foundConversation;
+      final conversationId = (friend["conversationId"] ?? "").toString();
 
-      for (final item in conversations) {
-        final conversation = Map<String, dynamic>.from(item);
-
-        final members = List<Map<String, dynamic>>.from(
-          (conversation["members"] ?? []).map((e) => Map<String, dynamic>.from(e)),
-        );
-
-        final hasFriend = members.any((member) {
-          final userObj = member["userId"];
-          if (userObj is Map<String, dynamic>) {
-            return userObj["_id"]?.toString() == friendUserId;
-          }
-          if (userObj is Map) {
-            return userObj["_id"]?.toString() == friendUserId;
-          }
-          return false;
-        });
-
-        if (hasFriend) {
-          foundConversation = conversation;
-          break;
-        }
-      }
-
-      if (!mounted) return;
-
-      if (foundConversation == null) {
+      if (conversationId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Không tìm thấy đoạn chat")),
+          const SnackBar(content: Text("Không tìm thấy đoạn chat riêng")),
         );
         return;
       }
 
+      if (!mounted) return;
+
       context.push(
         AppRoutes.chatScreen,
         extra: {
-          "conversationId": foundConversation["_id"],
+          "conversationId": conversationId,
           "otherUserId": friendUserId,
           "name": friend["fullName"] ?? "",
           "avatar": friend["avatarUrl"] ?? "",
@@ -171,7 +141,6 @@ class _ContactScreenState extends State<ContactScreen> {
       );
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -319,8 +288,6 @@ class _ContactScreenState extends State<ContactScreen> {
     final avatarUrl = friend["avatarUrl"] ?? "";
     final isOnline = friend["isOnline"] ?? false;
     final firstChar = friend["firstChar"] ?? "#";
-    print(friend);
-
     return ListTile(
       leading: CircleAvatar(
         radius: 24,

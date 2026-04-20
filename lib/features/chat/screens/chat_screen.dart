@@ -5,10 +5,13 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/features/chat/controllers/chat_controller.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_appbar.dart';
 import 'package:zalo_mobile_app/features/chat/screens/chat_message.dart';
 import 'package:zalo_mobile_app/features/chat/screens/message_option.dart';
+import 'package:zalo_mobile_app/features/conversation/screens/conversation_setting_screen.dart';
+import 'package:zalo_mobile_app/routes/app_routes.dart';
 import 'package:zalo_mobile_app/services/socket_service.dart';
 import 'chat_input.dart';
 
@@ -120,6 +123,38 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
           break;
+        case "group_disbanded":
+          if (data is! Map) break;
+
+          final conversationId = data["conversationId"]?.toString() ?? "";
+          if (conversationId != widget.conversationId) break;
+
+          final message =
+              data["message"]?.toString() ?? "Nhóm đã bị giải tán";
+
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+
+          context.go(AppRoutes.home);
+          break;
+        case "removed_from_group":
+          if (data is! Map) break;
+
+          final conversationId = data["conversationId"]?.toString() ?? "";
+          if (conversationId != widget.conversationId) break;
+
+          final message =
+              data["message"]?.toString() ?? "Nhóm đã bị giải tán";
+
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+
+          context.go(AppRoutes.home);
+          break;
       }
     });
   }
@@ -222,7 +257,50 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return sender["fullName"]?.toString() ?? "Người dùng";
   }
+  Future<void> _openConversationSettings() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ConversationSettingScreen(
+          conversationId: widget.conversationId,
+          name: widget.name,
+          avatar: widget.avatar,
+          type: widget.type,
+        ),
+      ),
+    );
 
+    if (!mounted || result == null || result is! Map<String, dynamic>) return;
+
+    final removedConversationId =
+        result['removedConversationId']?.toString() ?? '';
+
+    if (removedConversationId.isNotEmpty) {
+      _closeAfterRemovedConversation(removedConversationId);
+      return;
+    }
+
+    final targetMessageId = result['targetMessageId']?.toString() ?? '';
+    if (targetMessageId.isEmpty) return;
+
+    final found = await _ensureMessageLoaded(targetMessageId);
+    if (!found) return;
+
+    await Future.delayed(const Duration(milliseconds: 80));
+    await _scrollToMessageById(targetMessageId);
+  }
+
+  void _closeAfterRemovedConversation(String conversationId) {
+    final result = {
+      'removedConversationId': conversationId,
+    };
+
+    if (Navigator.of(context).canPop()) {
+      context.pop(result);
+    } else {
+      context.go(AppRoutes.home);
+    }
+  }
   Widget _buildPinnedBar() {
     if (pinnedMessages.isEmpty) return const SizedBox.shrink();
 
@@ -982,6 +1060,8 @@ class _ChatScreenState extends State<ChatScreen> {
               name: widget.name,
               avatar: widget.avatar,
               type: widget.type,
+              conversationId: widget.conversationId,
+              onOpenSettings: _openConversationSettings,
             ),
           ),
 

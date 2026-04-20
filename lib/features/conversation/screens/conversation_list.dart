@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zalo_mobile_app/features/conversation/controllers/conversation_controller.dart';
 import 'package:zalo_mobile_app/features/conversation/screens/conversation_item.dart';
 import 'package:zalo_mobile_app/routes/app_routes.dart';
+import 'package:zalo_mobile_app/services/socket_service.dart';
 
 class ConversationList extends StatefulWidget {
   const ConversationList({super.key});
@@ -20,10 +23,82 @@ class _ConversationListState extends State<ConversationList> {
   bool isLoading = true;
   String? currentUserId;
 
+  StreamSubscription<Map<String, dynamic>>? _socketSub;
+
   @override
   void initState() {
     super.initState();
     fetchData();
+
+    _socketSub = SocketService().eventsStream.listen((event) {
+      final eventName = event["event"];
+      final data = event["data"];
+
+      if (!mounted) return;
+
+      switch (eventName) {
+        case "group_disbanded":
+          if (data is! Map) break;
+
+          final conversationId = data["conversationId"]?.toString() ?? "";
+          if (conversationId.isEmpty) break;
+
+          setState(() {
+            conversations.removeWhere(
+                  (item) =>
+              item is Map<String, dynamic> &&
+                  item["_id"]?.toString() == conversationId,
+            );
+          });
+          break;
+
+        case "added_to_group":
+          if (data is! Map) break;
+
+          final conversationId = data["conversationId"]?.toString() ?? "";
+          if (conversationId.isEmpty) break;
+
+          final exists = conversations.any(
+                (item) =>
+            item is Map<String, dynamic> &&
+                item["_id"]?.toString() == conversationId,
+          );
+
+          if (exists) break;
+
+          setState(() {
+            conversations.insert(0, {
+              "_id": conversationId,
+              "type": "group",
+              "name": data["groupName"]?.toString() ?? "Nhóm chat",
+              "avatarUrl": data["avatarUrl"]?.toString() ?? "",
+              "lastMessageId": null,
+              "lastMessageAt": DateTime.now().toIso8601String(),
+            });
+          });
+          break;
+        case "removed_from_group":
+          if (data is! Map) break;
+
+          final conversationId = data["conversationId"]?.toString() ?? "";
+          if (conversationId.isEmpty) break;
+
+          setState(() {
+            conversations.removeWhere(
+                  (item) =>
+              item is Map<String, dynamic> &&
+                  item["_id"]?.toString() == conversationId,
+            );
+          });
+          break;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _socketSub?.cancel();
+    super.dispose();
   }
 
   Future<void> fetchData() async {
@@ -74,6 +149,7 @@ class _ConversationListState extends State<ConversationList> {
 
     return null;
   }
+
   String _stripHtml(String input) {
     var text = input;
 
@@ -101,13 +177,11 @@ class _ConversationListState extends State<ConversationList> {
   String _getConversationName(Map<String, dynamic> item) {
     final type = (item["type"] ?? "direct").toString();
 
-    // ✅ Group: lấy theo api trả về
     if (type == "group") {
       final name = (item["name"] ?? "").toString().trim();
       return name.isNotEmpty ? name : "Nhóm chat";
     }
 
-    // ✅ Direct: lấy theo logic cũ (tên người còn lại)
     final otherUser = getOtherUser(item["members"] as List?);
     return (otherUser?["fullName"] ?? "No name").toString();
   }
@@ -115,12 +189,10 @@ class _ConversationListState extends State<ConversationList> {
   String _getConversationAvatar(Map<String, dynamic> item) {
     final type = (item["type"] ?? "direct").toString();
 
-    // ✅ Group: lấy avatarUrl theo api trả về
     if (type == "group") {
       return (item["avatarUrl"] ?? "").toString();
     }
 
-    // ✅ Direct: lấy theo logic cũ (avatar người còn lại)
     final otherUser = getOtherUser(item["members"] as List?);
     return (otherUser?["avatarUrl"] ?? "").toString();
   }
@@ -172,27 +244,19 @@ class _ConversationListState extends State<ConversationList> {
               : "";
 
           if (attachmentType == "image") {
-            return content.isNotEmpty
-                ? "🖼 $content"
-                : "🖼 Hình ảnh";
+            return content.isNotEmpty ? "🖼 $content" : "🖼 Hình ảnh";
           }
 
           if (attachmentType == "file") {
-            return content.isNotEmpty
-                ? "📎 $content"
-                : "📎 Tệp đính kèm";
+            return content.isNotEmpty ? "📎 $content" : "📎 Tệp đính kèm";
           }
 
           if (attachmentType == "audio") {
-            return content.isNotEmpty
-                ? "🎵 $content"
-                : "🎵 Âm thanh";
+            return content.isNotEmpty ? "🎵 $content" : "🎵 Âm thanh";
           }
 
           if (attachmentType == "video") {
-            return content.isNotEmpty
-                ? "🎬 $content"
-                : "🎬 Video";
+            return content.isNotEmpty ? "🎬 $content" : "🎬 Video";
           }
         }
 
@@ -204,8 +268,10 @@ class _ConversationListState extends State<ConversationList> {
   }
 
   String _getLastTime(Map<String, dynamic> item) {
-    // Ưu tiên lastMessageAt (đúng theo api)
-    final raw = item["lastMessageAt"] ?? (item["lastMessageId"] is Map ? item["lastMessageId"]["createdAt"] : null);
+    final raw = item["lastMessageAt"] ??
+        (item["lastMessageId"] is Map
+            ? item["lastMessageId"]["createdAt"]
+            : null);
     if (raw == null) return "";
 
     try {
@@ -258,8 +324,8 @@ class _ConversationListState extends State<ConversationList> {
         final name = _getConversationName(item);
         final avatar = _getConversationAvatar(item);
 
-        // direct mới cần otherUserId để chat 1-1
-        final otherUserId = type == "direct" ? _getOtherUserIdForDirect(item) : "";
+        final otherUserId =
+        type == "direct" ? _getOtherUserIdForDirect(item) : "";
 
         return ConversationItem(
           name: name,
@@ -267,35 +333,53 @@ class _ConversationListState extends State<ConversationList> {
           lastMessage: _getLastMessage(item),
           time: _getLastTime(item),
           unreadCount: 0,
-            type: type,
+          type: type,
           onTap: () async {
-              const chatbotUserId = "680000000000000000000001";
+            const chatbotUserId = "680000000000000000000001";
 
-              if (otherUserId == chatbotUserId) {
-                // 👉 mở ChatBotScreen
-                await context.push(
-                  AppRoutes.chatbotScreen,
-                  extra: {
-                    "conversationId": conversationId,
-                    "name": name,
-                    "avatar": avatar,
-                  },
-                );
-              } else {
-                // 👉 mở ChatScreen bình thường
-                await context.push(
-                  AppRoutes.chatScreen,
-                  extra: {
-                    "conversationId": conversationId,
-                    "otherUserId": otherUserId,
-                    "name": name,
-                    "avatar": avatar,
-                    "type": type, // (tuỳ chọn) truyền sang chat screen
-              },
-                );
-               await fetchData();
+            if (otherUserId == chatbotUserId) {
+              await context.push(
+                AppRoutes.chatbotScreen,
+                extra: {
+                  "conversationId": conversationId,
+                  "name": name,
+                  "avatar": avatar,
+                  "type": "bot"
+                },
+              );
+            } else {
+              final result = await context.push(
+                AppRoutes.chatScreen,
+                extra: {
+                  "conversationId": conversationId,
+                  "otherUserId": otherUserId,
+                  "name": name,
+                  "avatar": avatar,
+                  "type": type,
+                },
+              );
+
+              if (!mounted) return;
+
+              if (result is Map<String, dynamic>) {
+                final removedConversationId =
+                    result['removedConversationId']?.toString() ?? '';
+
+                if (removedConversationId.isNotEmpty) {
+                  setState(() {
+                    conversations.removeWhere(
+                          (item) =>
+                      item is Map<String, dynamic> &&
+                          item["_id"]?.toString() == removedConversationId,
+                    );
+                  });
+                  return;
+                }
               }
-            },
+
+              await fetchData();
+            }
+          },
         );
       },
     );
@@ -309,7 +393,8 @@ class _ConversationListState extends State<ConversationList> {
 
     return RefreshIndicator(
       onRefresh: fetchData,
-      child: conversations.isEmpty ? _buildEmptyState() : _buildConversationList(),
+      child:
+      conversations.isEmpty ? _buildEmptyState() : _buildConversationList(),
     );
   }
 }

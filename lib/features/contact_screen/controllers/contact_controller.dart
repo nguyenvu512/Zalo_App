@@ -37,7 +37,7 @@ class ContactController {
 
     return null;
   }
-  Future<List<Map<String, dynamic>>> getFriends() async {
+  Future<List<Map<String, dynamic>>> getFriends({List<String>? excludeUserIds}) async {
     final token = await storage.read(key: "access_token");
     final userId = await storage.read(key: "user_id");
 
@@ -49,10 +49,15 @@ class ContactController {
       throw Exception("Không tìm thấy userId");
     }
 
-    final url = Uri.parse("${ApiConstants.baseUrl}/friendship/friends");
+    final uri = Uri.parse("${ApiConstants.baseUrl}/friendship/friends").replace(
+      queryParameters: {
+        if (excludeUserIds != null && excludeUserIds.isNotEmpty)
+          "excludeUserIds": excludeUserIds.join(","),
+      },
+    );
 
     final response = await http.get(
-      url,
+      uri,
       headers: {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",
@@ -66,7 +71,15 @@ class ContactController {
     final decoded = jsonDecode(response.body);
 
     if (response.statusCode != 200) {
-      throw Exception(decoded["message"] ?? "Lấy danh sách bạn bè thất bại");
+      throw Exception(
+        decoded is Map<String, dynamic>
+            ? (decoded["message"] ?? "Lấy danh sách bạn bè thất bại")
+            : "Lấy danh sách bạn bè thất bại",
+      );
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception("Response không hợp lệ");
     }
 
     final data = decoded["data"];
@@ -76,13 +89,16 @@ class ContactController {
     }
 
     final result = <Map<String, dynamic>>[];
-
     final sortedKeys = data.keys.toList()..sort();
 
     for (final key in sortedKeys) {
+      final friendsRaw = data[key];
+
+      if (friendsRaw is! List) continue;
+
       result.add({
         "letter": key,
-        "friends": List<Map<String, dynamic>>.from(data[key] ?? []),
+        "friends": List<Map<String, dynamic>>.from(friendsRaw),
       });
     }
 
