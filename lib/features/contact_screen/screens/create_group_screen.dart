@@ -21,8 +21,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   bool _isLoading = true;
   String? _error;
 
-  List<Map<String, dynamic>> _allFriends = [];
-  List<Map<String, dynamic>> _filteredFriends = [];
+  List<Map<String, dynamic>> _groupedFriends = [];
+  List<Map<String, dynamic>> _filteredGroupedFriends = [];
 
   final Set<String> _selectedIds = {};
 
@@ -39,6 +39,17 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     super.dispose();
   }
 
+  List<Map<String, dynamic>> get _allFriends {
+    final List<Map<String, dynamic>> result = [];
+
+    for (final group in _groupedFriends) {
+      final friends = List<Map<String, dynamic>>.from(group["friends"] ?? []);
+      result.addAll(friends);
+    }
+
+    return result;
+  }
+
   Future<void> _fetchFriends() async {
     try {
       setState(() {
@@ -48,17 +59,15 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
       final grouped = await _contactController.getFriends();
 
-      final List<Map<String, dynamic>> allFriends = [];
-      for (final group in grouped) {
-        final friends = List<Map<String, dynamic>>.from(group["friends"] ?? []);
-        allFriends.addAll(friends);
-      }
-
       if (!mounted) return;
 
       setState(() {
-        _allFriends = allFriends;
-        _filteredFriends = allFriends;
+        _groupedFriends = List<Map<String, dynamic>>.from(
+          grouped.map((e) => Map<String, dynamic>.from(e)),
+        );
+        _filteredGroupedFriends = List<Map<String, dynamic>>.from(
+          grouped.map((e) => Map<String, dynamic>.from(e)),
+        );
       });
     } catch (e) {
       if (!mounted) return;
@@ -78,14 +87,33 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
     setState(() {
       if (keyword.isEmpty) {
-        _filteredFriends = List.from(_allFriends);
-      } else {
-        _filteredFriends = _allFriends.where((friend) {
+        _filteredGroupedFriends = List<Map<String, dynamic>>.from(
+          _groupedFriends.map((e) => Map<String, dynamic>.from(e)),
+        );
+        return;
+      }
+
+      final List<Map<String, dynamic>> filtered = [];
+
+      for (final group in _groupedFriends) {
+        final letter = (group["letter"] ?? "#").toString();
+        final friends = List<Map<String, dynamic>>.from(group["friends"] ?? []);
+
+        final matchedFriends = friends.where((friend) {
           final name = (friend["fullName"] ?? "").toString().toLowerCase();
           final phone = (friend["phone"] ?? "").toString().toLowerCase();
           return name.contains(keyword) || phone.contains(keyword);
         }).toList();
+
+        if (matchedFriends.isNotEmpty) {
+          filtered.add({
+            "letter": letter,
+            "friends": matchedFriends,
+          });
+        }
       }
+
+      _filteredGroupedFriends = filtered;
     });
   }
 
@@ -319,6 +347,70 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     );
   }
 
+  Widget _buildGroupedFriendList() {
+    if (_filteredGroupedFriends.isEmpty) {
+      return const Expanded(
+        child: Center(
+          child: Text("Không tìm thấy bạn bè phù hợp"),
+        ),
+      );
+    }
+
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: ListView.builder(
+          itemCount: _filteredGroupedFriends.length,
+          itemBuilder: (context, index) {
+            final group = _filteredGroupedFriends[index];
+            final letter = (group["letter"] ?? "#").toString();
+            final friends =
+            List<Map<String, dynamic>>.from(group["friends"] ?? []);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: const Color(0xFFF5F6F8),
+                  child: Text(
+                    letter,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                ...friends.asMap().entries.map((entry) {
+                  final friendIndex = entry.key;
+                  final friend = entry.value;
+
+                  return Column(
+                    children: [
+                      _buildFriendItem(friend),
+                      if (friendIndex != friends.length - 1)
+                        Divider(
+                          height: 1,
+                          color: Colors.grey.shade200,
+                          indent: 74,
+                        ),
+                    ],
+                  );
+                }),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Expanded(
@@ -343,34 +435,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       );
     }
 
-    if (_filteredFriends.isEmpty) {
-      return const Expanded(
-        child: Center(
-          child: Text("Không tìm thấy bạn bè phù hợp"),
-        ),
-      );
-    }
-
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(top: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: ListView.separated(
-          itemCount: _filteredFriends.length,
-          separatorBuilder: (_, __) => Divider(
-            height: 1,
-            color: Colors.grey.shade200,
-            indent: 74,
-          ),
-          itemBuilder: (context, index) {
-            return _buildFriendItem(_filteredFriends[index]);
-          },
-        ),
-      ),
-    );
+    return _buildGroupedFriendList();
   }
 
   @override
